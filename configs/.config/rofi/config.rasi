@@ -1,0 +1,115 @@
+configuration {
+    modi: "drun";
+    show-icons: true;
+    display-drun: "󰄛 Apps";
+    drun-display-format: "{name}";
+    font: "JetBrainsMono Nerd Font 10";
+    close-on-click: true;
+}
+
+* {
+    /* Estas variables de color se sincronizan con Quickshell */
+    bg:        #161616cc;
+    bg-alt:    #242424;
+    fg:        #cdd6f4;
+    muted:     #6c7086;
+    accent:    #cba6f7;
+    subtle:    #45475a;
+
+    background-color: transparent;
+    text-color:       @fg;
+    margin:           0px;
+    padding:          0px;
+}
+
+window {
+    location:           north west;
+    anchor:             north west;
+    x-offset:           0px;
+    y-offset:           0px;
+    margin:             0px;
+    width:              360px;
+    height:             500px;
+    background-color:   @bg;
+    border:             0px;
+    border-radius:      0px 0px 10px 0px;
+    padding:            12px;
+}
+
+mainbox {
+    children: [ inputbar, listview ];
+    spacing: 10px;
+    background-color: transparent;
+}
+
+inputbar {
+    background-color:   @bg-alt;
+    border-radius:      6px;
+    padding:            8px 12px;
+    children:           [ prompt, entry ];
+    spacing:            8px;
+}
+
+prompt {
+    text-color:         @accent;
+    background-color:   transparent;
+}
+
+entry {
+    text-color:          @fg;
+    background-color:    transparent;
+    placeholder:         "Buscar aplicación...";
+    placeholder-color:   @muted;
+}
+
+listview {
+    lines:              8;
+    columns:            1;
+    scrollbar:          false;
+    spacing:            4px;
+    background-color:   transparent;
+}
+
+element {
+    padding:            8px;
+    border-radius:      6px;
+    spacing:            10px;
+    background-color:   transparent;
+    text-color:         @fg;
+}
+
+element normal.normal,
+element alternate.normal {
+    background-color:   transparent;
+    text-color:         @fg;
+}
+
+element normal.urgent,
+element alternate.urgent {
+    background-color:   @subtle;
+    text-color:         @fg;
+}
+
+element normal.active,
+element alternate.active {
+    background-color:   @subtle;
+    text-color:         @fg;
+}
+
+element selected.normal,
+element selected.urgent,
+element selected.active {
+    background-color:   @accent;
+    text-color:         #11111b;
+}
+
+element-icon {
+    size:               20px;
+    background-color:   transparent;
+}
+
+element-text {
+    vertical-align:     0.5;
+    background-color:   transparent;
+    text-color:         inherit;
+}
