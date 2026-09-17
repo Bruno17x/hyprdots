@@ -79,13 +79,25 @@ QtObject {
     readonly property color danger: themes[currentTheme] ? themes[currentTheme].danger : "#f38ba8"
     readonly property string wallpaper: themes[currentTheme] ? themes[currentTheme].wallpaper : ""
 
-    property Process rofiSyncProcess: Process {
-        id: rofiSync
+    property Process syncProcess: Process {
+        id: syncRunner
     }
 
     onCurrentThemeChanged: {
         let activeColor = themes[currentTheme] ? themes[currentTheme].primary : "#cba6f7";
-        rofiSync.command = ["sh", "-c", "sed -i 's/^[[:space:]]*accent:[[:space:]]*#[a-fA-F0-9]*;/    accent:    " + activeColor + ";/' " + Quickshell.env("HOME") + "/.config/rofi/config.rasi"];
-        rofiSync.running = true;
+        let themeName = currentTheme; // "purple", "red", "blue" o "white"
+        
+        let homeDir = Quickshell.env("HOME");
+
+        // Comando combinado para actualizar Rofi, actualizar el settings.ini de GTK3 y refrescar gsettings
+        let shellCmd = 
+            "sed -i 's/^[[:space:]]*accent:[[:space:]]*#[a-fA-F0-9]*;/    accent:    " + activeColor + ";/' " + homeDir + "/.config/rofi/config.rasi && " +
+            "sed -i 's/^gtk-theme-name[[:space:]]*=.*/gtk-theme-name = " + themeName + "و/' " + homeDir + "/.config/gtk-3.0/settings.ini || true; " +
+            "gsettings set org.gnome.desktop.interface gtk-theme '" + themeName + "' || true";
+
+        syncRunner.command = ["sh", "-c", "sed -i 's/^gtk-theme-name[[:space:]]*=.*/gtk-theme-name = " + themeName + "/' " + homeDir + "/.config/gtk-3.0/settings.ini && " +
+                                          "sed -i 's/^[[:space:]]*accent:[[:space:]]*#[a-fA-F0-9]*;/    accent:    " + activeColor + ";/' " + homeDir + "/.config/rofi/config.rasi && " +
+                                          "gsettings set org.gnome.desktop.interface gtk-theme '" + themeName + "'"];
+        syncRunner.running = true;
     }
 }
