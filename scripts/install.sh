@@ -19,18 +19,19 @@ else
 fi
 
 echo "=== 3. Instalando la lista de aplicaciones solicitadas ==="
-# Lista de paquetes que se instalarán mediante yay (maneja repos oficiales y AUR)
+# Lista de paquetes que se instalarán mediante yay (incluye powerlevel10k)
 APPS=(
     "hyprland"
     "kitty"
     "gtk3"
     "fastfetch"
     "networkmanager"
-    "quickshell-git"    # O quickshell según cómo lo encuentres en AUR
+    "quickshell-git"
     "pulseaudio"
     "pavucontrol"
     "rofi"
     "zsh"
+    "zsh-theme-powerlevel10k-git"
     "swaybg"
     "unzip"
     "code"
