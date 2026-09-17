@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 QtObject {
     id: theme
@@ -77,4 +78,14 @@ QtObject {
     readonly property color muted: themes[currentTheme] ? themes[currentTheme].muted : "#6c7086"
     readonly property color danger: themes[currentTheme] ? themes[currentTheme].danger : "#f38ba8"
     readonly property string wallpaper: themes[currentTheme] ? themes[currentTheme].wallpaper : ""
+
+    property Process rofiSyncProcess: Process {
+        id: rofiSync
+    }
+
+    onCurrentThemeChanged: {
+        let activeColor = themes[currentTheme] ? themes[currentTheme].primary : "#cba6f7";
+        rofiSync.command = ["sh", "-c", "sed -i 's/^[[:space:]]*accent:[[:space:]]*#[a-fA-F0-9]*;/    accent:    " + activeColor + ";/' " + Quickshell.env("HOME") + "/.config/rofi/config.rasi"];
+        rofiSync.running = true;
+    }
 }
