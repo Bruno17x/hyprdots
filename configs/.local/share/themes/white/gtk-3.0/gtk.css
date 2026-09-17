@@ -1,0 +1,176 @@
+/* ==========================================================
+   TEMA: red (GTK3)
+   Base: #d9161616 -> rgba(22, 22, 22, 0.85)
+   Acento: #f38ba8
+   Borde: #443131
+   ========================================================== */
+
+* {
+    font-family: "JetBrainsMono Nerd Font";
+    font-size: 10pt;
+    outline: none;
+    -gtk-secondary-caret-color: #f38ba8;
+}
+
+/* --- VENTANAS Y DIÁLOGOS --- */
+window,
+dialog,
+assistant,
+.background,
+messagedialog {
+    background-color: rgba(22, 22, 22, 0.85);
+    color: #cdd6f4;
+}
+
+/* Evitar que contenedores interiores tapen la transparencia */
+scrolledwindow,
+viewport,
+box,
+grid {
+    background-color: transparent;
+    color: #cdd6f4;
+}
+
+/* --- BARRA DE TÍTULO / HEADERBAR --- */
+headerbar,
+.titlebar {
+    background-color: rgba(22, 22, 22, 0.85);
+    border-bottom: 1px solid #443131;
+    box-shadow: none;
+    color: #cdd6f4;
+    padding: 4px 8px;
+}
+
+headerbar .title {
+    color: #cdd6f4;
+    font-weight: bold;
+}
+
+headerbar button {
+    background-color: #312424;
+    border: 1px solid #443131;
+    border-radius: 6px;
+    color: #cdd6f4;
+}
+
+headerbar button:hover {
+    background-color: #443131;
+    color: #f38ba8;
+    border-color: #f38ba8;
+}
+
+/* --- LISTAS --- */
+treeview.view,
+list,
+listview {
+    background-color: rgba(36, 36, 36, 0.6);
+    color: #cdd6f4;
+    border: 1px solid #443131;
+    border-radius: 6px;
+}
+
+treeview.view:hover,
+list row:hover {
+    background-color: rgba(68, 49, 49, 0.5);
+}
+
+treeview.view:selected,
+list row:selected {
+    background-color: #f38ba8;
+    color: #11111b;
+}
+
+/* --- ENTRADAS DE TEXTO --- */
+entry {
+    background-color: #312424;
+    color: #cdd6f4;
+    border: 1px solid #443131;
+    border-radius: 6px;
+    padding: 6px 10px;
+}
+
+entry:focus {
+    border-color: #f38ba8;
+    box-shadow: none;
+}
+
+/* --- DESPLEGABLES (COMBOBOX) --- */
+combobox button.combo {
+    background-color: #312424;
+    color: #cdd6f4;
+    border: 1px solid #443131;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+
+combobox menu,
+popover.menu {
+    background-color: #161616;
+    border: 1px solid #443131;
+    color: #cdd6f4;
+}
+
+/* --- BOTONES GENERALES --- */
+button {
+    background-color: #312424;
+    color: #cdd6f4;
+    border: 1px solid #443131;
+    border-radius: 6px;
+    padding: 6px 14px;
+}
+
+button:hover {
+    background-color: #443131;
+    border-color: #f38ba8;
+    color: #f38ba8;
+}
+
+button:active,
+button.suggested-action,
+button:checked {
+    background-color: #f38ba8;
+    border-color: #f38ba8;
+    color: #11111b;
+}
+
+/* --- PESTAÑAS (NOTEBOOK) --- */
+notebook {
+    background-color: transparent;
+    border: none;
+}
+
+notebook > stack {
+    background-color: transparent;
+}
+
+notebook > header {
+    background-color: rgba(22, 22, 22, 0.85);
+    border-bottom: 1px solid #443131;
+}
+
+notebook > header tab {
+    background-color: transparent;
+    color: #6c7086;
+    border: none;
+    padding: 6px 12px;
+}
+
+notebook > header tab:hover {
+    color: #cdd6f4;
+}
+
+notebook > header tab:checked {
+    color: #f38ba8;
+    border-bottom: 2px solid #f38ba8;
+}
+
+/* --- BARRA DE SCROLL --- */
+scrollbar slider {
+    background-color: #443131;
+    border-radius: 4px;
+    min-width: 4px;
+}
+
+scrollbar slider:hover {
+    background-color: #5a4545;
+}
