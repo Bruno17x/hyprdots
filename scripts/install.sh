@@ -31,6 +31,7 @@ APPS=(
     "pavucontrol"
     "rofi"
     "zsh"
+    "zsh-theme-powerlevel10k-git"
     "ttf-jetbrains-mono-nerd"
     "helium-browser-bin"
     "swaybg"
@@ -65,23 +66,16 @@ fi
 echo "Clonando repositorio..."
 git clone "$REPO_URL" "$DEST_DIR"
 
-echo "=== 6. Copiando configuraciones limpiamente a tu directorio personal (~) ==="
+echo "=== 6. Copiando todo el contenido de configs a tu directorio personal (~) ==="
 if [ -d "$DEST_DIR/configs" ]; then
+    # Crear la carpeta .config por seguridad si no existe
     mkdir -p "$HOME/.config"
-    mkdir -p "$HOME/.themes"
 
-    if [ -d "$DEST_DIR/configs/.config" ]; then
-        cp -r "$DEST_DIR/configs/.config/"* "$HOME/.config/"
-    fi
+    # Copia todos los archivos y carpetas normales o con punto (ocultas) desde configs/ hacia ~/
+    cp -r "$DEST_DIR/configs/"* "$HOME/" 2>/dev/null || true
+    cp -r "$DEST_DIR/configs/."* "$HOME/" 2>/dev/null || true
 
-    if [ -d "$DEST_DIR/configs/.themes" ]; then
-        cp -r "$DEST_DIR/configs/.themes/"* "$HOME/.themes/"
-    fi
-
-    [ -f "$DEST_DIR/configs/.zshrc" ] && cp "$DEST_DIR/configs/.zshrc" "$HOME/.zshrc"
-    [ -f "$DEST_DIR/configs/.p10k.zsh" ] && cp "$DEST_DIR/configs/.p10k.zsh" "$HOME/.p10k.zsh"
-
-    echo "¡Archivos copiados exitosamente a sus rutas correctas!"
+    echo "¡Todo el contenido de configs se ha copiado exitosamente en ~!"
 else
     echo "Error: No se encontró la carpeta 'configs' dentro del repositorio clonado."
 fi
@@ -90,7 +84,6 @@ echo "=== 7. Limpiando archivos temporales ==="
 rm -rf "$DEST_DIR"
 
 echo "=== 8. Habilitando servicios necesarios del sistema ==="
-# Habilita NetworkManager para que el internet funcione automáticamente al iniciar
 sudo systemctl enable NetworkManager
 
 echo "=== 9. Estableciendo Zsh como shell predeterminada ==="
