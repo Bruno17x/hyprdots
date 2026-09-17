@@ -39,7 +39,7 @@ ShellRoot {
     Process {
         id: loadSavedThemeProc
         running: true
-        command: ["sh", "-c", "[ -f ~/.config/quickshell/current_theme.txt ] && cat ~/.config/quickshell/current_theme.txt || echo 'purple'"]
+        command: ["sh", "-c", "[ -f ~/.config/quickshell/current_theme.txt ] && cat ~/.config/quickshell/current_theme.txt | tr -d '\\n' || echo 'purple'"]
         stdout: SplitParser {
             onRead: line => {
                 var t = line.trim();
@@ -56,7 +56,7 @@ ShellRoot {
         running: true
         command: [
             "sh", "-c",
-            "[ -f ~/.config/quickshell/current_theme.txt ] && theme=$(cat ~/.config/quickshell/current_theme.txt) || theme='purple'; " +
+            "[ -f ~/.config/quickshell/current_theme.txt ] && theme=$(cat ~/.config/quickshell/current_theme.txt | tr -d '\\n') || theme='purple'; " +
             "pkill swaybg; swaybg -o '*' -i \"$HOME/wallpapers/$theme.jpeg\" -m fill &"
         ]
     }
@@ -240,7 +240,8 @@ ShellRoot {
     Process {
         id: execCmdProc
         property string targetCmd: ""
-        command: ["sh", "-c", targetCmd]
+        // Se asegura de inyectar GTK_THEME en cualquier comando de red lanzado desde la barra
+        command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " " + targetCmd]
         onExited: root.refreshAllNetworks()
     }
 
@@ -264,9 +265,10 @@ ShellRoot {
         }
     }
 
+    // Inyecta el tema actual al crear conexiones de red
     Process {
         id: addConnProc
-        command: ["nm-connection-editor", "--create"]
+        command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " nm-connection-editor --create"]
     }
 
     Process {
@@ -284,7 +286,6 @@ ShellRoot {
         command: ["hyprctl", "dispatch", "exit"]
     }
 
-    // Proceso para aplicar el tema GTK y fondo de pantalla con swaybg
     Process {
         id: themeExec
     }
@@ -320,7 +321,7 @@ ShellRoot {
         }
     }
 
-    // --- MENÚ DESPLEGABLE: SELECTOR DE TEMAS (GRID DE 2 COLUMNAS CON WALLPAPER) ---
+    // --- MENÚ DESPLEGABLE: SELECTOR DE TEMAS ---
     PanelWindow {
         id: themeDropdown
         anchors {
@@ -385,7 +386,6 @@ ShellRoot {
                             border.width: Theme.currentTheme === modelData ? 2 : 1
                             clip: true
 
-                            // Miniatura del wallpaper
                             Image {
                                 anchors.fill: parent
                                 anchors.margins: 2
@@ -394,7 +394,6 @@ ShellRoot {
                                 opacity: 0.65
                             }
 
-                            // Nombre del tema con esquinas inferiores redondeadas
                             Rectangle {
                                 anchors.bottom: parent.bottom
                                 anchors.left: parent.left
@@ -424,7 +423,7 @@ ShellRoot {
                                     Theme.currentTheme = modelData;
                                     themeExec.command = [
                                         "sh", "-c",
-                                        "mkdir -p ~/.config/quickshell && echo '" + modelData + "' > ~/.config/quickshell/current_theme.txt && " +
+                                        "mkdir -p ~/.config/quickshell && echo -n '" + modelData + "' > ~/.config/quickshell/current_theme.txt && " +
                                         "gsettings set org.gnome.desktop.interface gtk-theme '" + modelData + "' && " +
                                         "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' && " +
                                         "pkill swaybg; swaybg -o '*' -i \"$HOME/wallpapers/" + modelData + ".jpeg\" -m fill & " +
@@ -1850,9 +1849,10 @@ ShellRoot {
             command: ["sh", "-c", "pkill rofi || rofi -show drun"]
         }
 
+        // Inyecta el tema actual al abrir pavucontrol desde la barra
         Process {
             id: audioProc
-            command: ["pavucontrol"]
+            command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " pavucontrol"]
         }
 
         Item {
