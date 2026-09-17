@@ -1,0 +1,19 @@
+{
+  "logo": {
+    "type": "kitty-icat",
+    "source": "/home/bruno/.config/fastfetch/logo.png",
+    "width": 15,
+    "height": 15
+  },
+  "modules": [
+    "break",
+    "break",
+    "break",
+    "break",
+    "break",
+    "break",
+    "break",
+    "break",
+    "break"
+  ]
+}
