@@ -50,14 +50,16 @@ ShellRoot {
         }
     }
 
-    // Aplicar el wallpaper guardado automáticamente al arrancar Quickshell
+    // Aplicar el wallpaper guardado solo si no hay un swaybg activo (evita que se quite al guardar config)
     Process {
         id: initWallpaperProc
         running: true
         command: [
             "sh", "-c",
+            "pgrep -x swaybg > /dev/null || (" +
             "[ -f ~/.config/quickshell/current_theme.txt ] && theme=$(cat ~/.config/quickshell/current_theme.txt | tr -d '\\n') || theme='purple'; " +
-            "pkill swaybg; swaybg -o '*' -i \"$HOME/wallpapers/$theme.jpeg\" -m fill &"
+            "swaybg -o '*' -i \"$HOME/wallpapers/$theme.jpeg\" -m fill &" +
+            ")"
         ]
     }
 
@@ -240,7 +242,6 @@ ShellRoot {
     Process {
         id: execCmdProc
         property string targetCmd: ""
-        // Se asegura de inyectar GTK_THEME en cualquier comando de red lanzado desde la barra
         command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " " + targetCmd]
         onExited: root.refreshAllNetworks()
     }
@@ -265,7 +266,6 @@ ShellRoot {
         }
     }
 
-    // Inyecta el tema actual al crear conexiones de red
     Process {
         id: addConnProc
         command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " nm-connection-editor --create"]
@@ -279,6 +279,12 @@ ShellRoot {
     Process {
         id: sessionRebootProc
         command: ["systemctl", "reboot"]
+    }
+
+    // Proceso para abrir hyprmod de forma normal
+    Process {
+        id: hyprmodProc
+        command: ["sh", "-c", "hyprmod"]
     }
 
     Process {
@@ -917,7 +923,7 @@ ShellRoot {
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
                                             root.netMenuOpen = false;
-                                            execCmdProc.targetCmd = "uuid=$(nmcli -g UUID,DEVICE connection show --active 2>/dev/null | awk -F: -v d='" + modelData.device + "' '$2==d{print $1; exit}'); [ -z \"$uuid\" ] && uuid=$(nmcli -g UUID,DEVICE connection show 2>/dev/null | awk -F: -v d='" + modelData.device + "' '$2==d{print $1; exit}'); if [ -n \"$uuid\" ]; then nm-connection-editor --edit=\"$uuid\"; else nm-connection-editor; fi";
+                                            execCmdProc.targetCmd = "uuid=$(nmcli -g UUID,DEVICE connection show --active 2>/dev/null | awk -F: -v d='" + modelData.device + "' '$2==d{print $1; exit}'); [ -z \"$uuid\" ] && uuid=$(nmcli -g UUID,DEVICE connection show 2>/dev/null | awk -F: -v d='" + modelData.device + "' '$2==d{print $1; exit}'); if [ -n \"$uuid\" ]; then nmcli connection delete uuid \"$uuid\"; else nmcli device delete '" + modelData.device + "' 2>/dev/null || nmcli device disconnect '" + modelData.device + "'; fi";
                                             execCmdProc.running = false;
                                             execCmdProc.running = true;
                                         }
@@ -1849,7 +1855,6 @@ ShellRoot {
             command: ["sh", "-c", "pkill rofi || rofi -show drun"]
         }
 
-        // Inyecta el tema actual al abrir pavucontrol desde la barra
         Process {
             id: audioProc
             command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " pavucontrol"]
@@ -1858,7 +1863,7 @@ ShellRoot {
         Item {
             anchors.fill: parent
             anchors.leftMargin: 16
-            anchors.rightMargin: 16
+            anchors.rightMargin: 4
 
             // --- IZQUIERDA ---
             RowLayout {
@@ -1965,69 +1970,86 @@ ShellRoot {
             RowLayout {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 14
+                spacing: 4
 
-                // Red
-                Row {
-                    spacing: 6
+                // Red (hoverEnabled agregado para corregir el hover)
+                Rectangle {
+                    id: netRect
+                    height: 24
+                    Layout.preferredWidth: 135
+                    color: root.netMenuOpen || netMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                    border.color: netMouse.containsMouse ? Theme.primary : Theme.border
+                    border.width: 1
+                    radius: 6
+
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
 
                     Row {
-                        spacing: 8
-                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 6
+                        anchors.centerIn: parent
 
                         Row {
-                            spacing: 3
-                            Text {
-                                text: "↓"
-                                color: Theme.primary
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 12
-                                font.bold: true
+                            spacing: 8
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Row {
+                                spacing: 3
+                                Text {
+                                    text: "↓"
+                                    color: Theme.primary
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                }
+                                Text {
+                                    text: bar.downSpeed
+                                    color: Theme.text
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                }
                             }
-                            Text {
-                                text: bar.downSpeed
-                                color: Theme.text
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 12
+
+                            Row {
+                                spacing: 3
+                                Text {
+                                    text: "↑"
+                                    color: Theme.primary
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                }
+                                Text {
+                                    text: bar.upSpeed
+                                    color: Theme.text
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 10
+                                }
                             }
                         }
 
-                        Row {
-                            spacing: 3
-                            Text {
-                                text: "↑"
-                                color: Theme.primary
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 12
-                                font.bold: true
-                            }
-                            Text {
-                                text: bar.upSpeed
-                                color: Theme.text
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 12
-                            }
+                        Text {
+                            text: root.ethernetConnected ? "\uf0e8" : "\uf1eb"
+                            color: root.netMenuOpen ? Theme.primaryHover : Theme.primary
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
-                    Text {
-                        text: root.ethernetConnected ? "\uf0e8" : "\uf1eb"
-                        color: root.netMenuOpen ? Theme.primaryHover : Theme.primary
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                root.audioMenuOpen = false;
-                                root.micMenuOpen = false;
-                                root.sessionMenuOpen = false;
-                                root.themeMenuOpen = false;
-                                root.netMenuOpen = !root.netMenuOpen;
-                                if (root.netMenuOpen) {
-                                    root.refreshAllNetworks();
-                                }
+                    MouseArea {
+                        id: netMouse
+                        anchors.fill: parent
+                        hoverEnabled: true // <--- Habilitado para que funcione el hover correctamente
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.audioMenuOpen = false;
+                            root.micMenuOpen = false;
+                            root.sessionMenuOpen = false;
+                            root.themeMenuOpen = false;
+                            root.netMenuOpen = !root.netMenuOpen;
+                            if (root.netMenuOpen) {
+                                root.refreshAllNetworks();
                             }
                         }
                     }
@@ -2035,13 +2057,19 @@ ShellRoot {
 
                 // 1. Audio Salida
                 Rectangle {
-                    width: audioRow.width + 12
-                    height: 28
-                    color: "transparent"
+                    id: audioRect
+                    height: 24
+                    Layout.preferredWidth: 55
+                    color: root.audioMenuOpen || audioMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                    border.color: audioMouse.containsMouse ? Theme.primary : Theme.border
+                    border.width: 1
+                    radius: 6
                     Layout.alignment: Qt.AlignVCenter
 
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
                     Row {
-                        id: audioRow
                         spacing: 6
                         anchors.centerIn: parent
 
@@ -2049,7 +2077,7 @@ ShellRoot {
                             text: root.audioMuted ? "0%" : root.audioVolumeInt + "%"
                             color: Theme.text
                             font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
+                            font.pixelSize: 10
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -2057,12 +2085,13 @@ ShellRoot {
                             text: root.audioMuted ? "󰝟" : (root.audioVolumeInt === 0 ? "󰕿" : (root.audioVolumeInt < 50 ? "󰖀" : "󰕾"))
                             color: root.audioMenuOpen ? Theme.primaryHover : (root.audioMuted ? Theme.danger : Theme.primary)
                             font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 14
+                            font.pixelSize: 12
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     MouseArea {
+                        id: audioMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
@@ -2103,13 +2132,19 @@ ShellRoot {
 
                 // 2. Audio Entrada (Micrófono)
                 Rectangle {
-                    width: micRow.width + 12
-                    height: 28
-                    color: "transparent"
+                    id: micRect
+                    height: 24
+                    Layout.preferredWidth: 55
+                    color: root.micMenuOpen || micMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                    border.color: micMouse.containsMouse ? Theme.primary : Theme.border
+                    border.width: 1
+                    radius: 6
                     Layout.alignment: Qt.AlignVCenter
 
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
                     Row {
-                        id: micRow
                         spacing: 6
                         anchors.centerIn: parent
 
@@ -2117,7 +2152,7 @@ ShellRoot {
                             text: root.micMuted ? "0%" : root.micVolumeInt + "%"
                             color: Theme.text
                             font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
+                            font.pixelSize: 10
                             anchors.verticalCenter: parent.verticalCenter
                         }
 
@@ -2125,12 +2160,13 @@ ShellRoot {
                             text: root.micMuted ? "󰍭" : "󰍬"
                             color: root.micMenuOpen ? Theme.primaryHover : (root.micMuted ? Theme.danger : Theme.primary)
                             font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 14
+                            font.pixelSize: 12
                             anchors.verticalCenter: parent.verticalCenter
                         }
                     }
 
                     MouseArea {
+                        id: micMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
@@ -2170,54 +2206,89 @@ ShellRoot {
                 }
 
                 // GPU
-                Row {
-                    spacing: 6
+                Rectangle {
+                    height: 24
+                    Layout.preferredWidth: 50
+                    color: Theme.surface
+                    border.color: Theme.border
+                    border.width: 1
+                    radius: 6
 
-                    Text {
-                        text: bar.gpuUsage
-                        color: Theme.text
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
+                    Row {
+                        spacing: 6
+                        anchors.centerIn: parent
 
-                    Text {
-                        text: "\udb82\udcb6"
-                        color: Theme.primary
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
+                        Text {
+                            text: bar.gpuUsage
+                            color: Theme.text
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: "\udb82\udcb6"
+                            color: Theme.primary
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
                     }
                 }
 
                 // CPU
-                Row {
-                    spacing: 6
+                Rectangle {
+                    height: 24
+                    Layout.preferredWidth: 50
+                    color: Theme.surface
+                    border.color: Theme.border
+                    border.width: 1
+                    radius: 6
 
-                    Text {
-                        text: bar.cpuUsage
-                        color: Theme.text
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
+                    Row {
+                        spacing: 6
+                        anchors.centerIn: parent
 
-                    Text {
-                        text: "\uf2db"
-                        color: Theme.primary
-                        font.family: "JetBrainsMono Nerd Font"
-                        font.pixelSize: 14
+                        Text {
+                            text: bar.cpuUsage
+                            color: Theme.text
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: "\uf2db"
+                            color: Theme.primary
+                            font.family: "JetBrainsMono Nerd Font"
+                            font.pixelSize: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
                     }
                 }
 
                 // Botón de Selector de Temas
-                Text {
-                    text: "󰸉"
-                    color: root.themeMenuOpen ? Theme.primaryHover : Theme.primary
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
+                Rectangle {
+                    height: 24
+                    width: 28
+                    color: root.themeMenuOpen || themeMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                    border.color: themeMouse.containsMouse ? Theme.primary : Theme.border
+                    border.width: 1
+                    radius: 6
+
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                    Text {
+                        text: "󰸉"
+                        color: root.themeMenuOpen ? Theme.primaryHover : Theme.primary
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        anchors.centerIn: parent
+                    }
 
                     MouseArea {
+                        id: themeMouse
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             root.netMenuOpen = false;
@@ -2229,15 +2300,62 @@ ShellRoot {
                     }
                 }
 
-                // Botón de Apagado / Sesión
-                Text {
-                    text: "⏻"
-                    color: root.sessionMenuOpen ? Theme.primaryHover : Theme.primary
-                    font.family: "JetBrainsMono Nerd Font"
-                    font.pixelSize: 14
+                // Botón de Opciones (Hyprmod)
+                Rectangle {
+                    height: 24
+                    width: 28
+                    color: hyprmodMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                    border.color: hyprmodMouse.containsMouse ? Theme.primary : Theme.border
+                    border.width: 1
+                    radius: 6
+
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                    Text {
+                        text: "󰒓"
+                        color: Theme.primary
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        anchors.centerIn: parent
+                    }
 
                     MouseArea {
+                        id: hyprmodMouse
                         anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            hyprmodProc.running = false;
+                            hyprmodProc.running = true;
+                        }
+                    }
+                }
+
+                // Botón de Apagado / Sesión
+                Rectangle {
+                    height: 24
+                    width: 28
+                    color: root.sessionMenuOpen || sessionMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                    border.color: sessionMouse.containsMouse ? Theme.primary : Theme.border
+                    border.width: 1
+                    radius: 6
+
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                    Text {
+                        text: "⏻"
+                        color: root.sessionMenuOpen ? Theme.primaryHover : Theme.primary
+                        font.family: "JetBrainsMono Nerd Font"
+                        font.pixelSize: 12
+                        anchors.centerIn: parent
+                    }
+
+                    MouseArea {
+                        id: sessionMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             root.netMenuOpen = false;
