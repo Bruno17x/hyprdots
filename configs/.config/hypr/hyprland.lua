@@ -63,6 +63,7 @@ end)
 
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
+--hl.env("GTK_THEME", "purple")
 
 -----------------------
 ----- PERMISSIONS -----
@@ -383,3 +384,14 @@ hl.window_rule({
     center      = true,
     size        = "460 520",
 })
+
+hl.window_rule({
+    name        = "hyprmod-centered",
+    match       = { class = "io.github.bluemancz.hyprmod" },
+    float       = true,
+    center      = true,
+    size        = "460 520",
+})
+
+-- HyprMod managed settings
+require("hyprland-gui")
