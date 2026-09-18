@@ -37,6 +37,8 @@ APPS=(
     "swaybg"
     "unzip"
     "code"
+    "yazi"
+    "hyprmod"
 )
 
 for app in "${APPS[@]}"; do
