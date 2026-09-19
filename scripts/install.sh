@@ -39,6 +39,7 @@ APPS=(
     "code"
     "yazi"
     "hyprmod"
+    "hyprshot"
 )
 
 for app in "${APPS[@]}"; do
