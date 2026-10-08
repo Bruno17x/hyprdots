@@ -83,17 +83,18 @@ ShellRoot {
         }
     }
 
-    // 3. Lista de Interfaces de Red
+    // 3. Lista de Conexiones y Perfiles de Red de NetworkManager
     Process {
         id: ifaceScanProc
         running: true
         command: [
             "sh", "-c",
-            "ip -br addr show 2>/dev/null | awk '$1 !~ /^lo$/ { " +
-            "  dev=$1; state=($2==\"UP\"?\"connected\":\"disconnected\"); " +
-            "  split($3, a, \"/\"); ip=(a[1]!=\"\"?a[1]:\"Sin IP\"); " +
-            "  type=(dev ~ /^wl/?\"wifi\":(dev ~ /^e/?\"ethernet\":\"virtual\")); " +
-            "  print dev \"|\" type \"|\" state \"|\" dev \"|\" ip; " +
+            "nmcli -t -f NAME,TYPE,DEVICE,STATE connection show 2>/dev/null | awk -F: '$2 ~ /ethernet|wireless|802-3-ethernet|802-11-wireless/ { " +
+            "  name=$1; " +
+            "  type=($2 ~ /wireless|802-11-wireless/ ? \"wifi\" : \"ethernet\"); " +
+            "  state=($4 == \"activated\" ? \"connected\" : \"disconnected\"); " +
+            "  dev=($3 != \"\" ? $3 : \"en espera\"); " +
+            "  print name \"|\" type \"|\" state \"|\" dev \"|\" ($4 == \"activated\" ? \"Conectado\" : \"Guardado\"); " +
             "}'"
         ]
         stdout: SplitParser {
@@ -105,11 +106,11 @@ ShellRoot {
                     var current = [];
                     for (var i = 0; i < root.interfacesList.length; i++) current.push(root.interfacesList[i]);
                     current.push({
-                        device: p[0],
-                        type: p[1],
-                        state: p[2],
-                        connection: p[3],
-                        ip: p[4]
+                        device: p[0],      // Nombre de la conexión (ej. Ethernet connection 1)
+                        type: p[1],        // ethernet o wifi
+                        state: p[2],       // connected o disconnected
+                        connection: p[3],  // Dispositivo físico asignado
+                        ip: p[4]           // Estado (Conectado / Guardado)
                     });
                     root.interfacesList = current;
                 }
@@ -244,6 +245,21 @@ ShellRoot {
         property string targetCmd: ""
         command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " " + targetCmd]
         onExited: root.refreshAllNetworks()
+    }
+
+    // PROCESO CORREGIDO: Extrae el UUID exacto usando el nombre de la red e invoca el editor por UUID
+    Process {
+        id: editConnProc
+        property string targetName: ""
+        command: [
+            "sh", "-c",
+            "uuid=$(nmcli -f NAME,UUID connection show | grep -F '" + targetName + "' | awk '{print $NF}' | head -n1); " +
+            "if [ -n \"$uuid\" ]; then " +
+            "  GTK_THEME=" + Theme.currentTheme + " nm-connection-editor --edit \"$uuid\" & " +
+            "else " +
+            "  GTK_THEME=" + Theme.currentTheme + " nm-connection-editor & " +
+            "fi"
+        ]
     }
 
     Process {
@@ -711,7 +727,7 @@ ShellRoot {
                                 if (root.targetDeleteType === "vpn") {
                                     execCmdProc.targetCmd = "nmcli connection delete id '" + root.targetDeleteName + "'";
                                 } else {
-                                    execCmdProc.targetCmd = "uuid=$(nmcli -g UUID,DEVICE connection show --active 2>/dev/null | awk -F: -v d='" + root.targetDeleteName + "' '$2==d{print $1; exit}'); [ -z \"$uuid\" ] && uuid=$(nmcli -g UUID,DEVICE connection show 2>/dev/null | awk -F: -v d='" + root.targetDeleteName + "' '$2==d{print $1; exit}'); if [ -n \"$uuid\" ]; then nmcli connection delete uuid \"$uuid\"; else nmcli device delete '" + root.targetDeleteName + "' 2>/dev/null || nmcli device disconnect '" + root.targetDeleteName + "'; fi";
+                                    execCmdProc.targetCmd = "nmcli connection delete id '" + root.targetDeleteName + "' 2>/dev/null || nmcli device disconnect '" + root.targetDeleteName + "'";
                                 }
                                 execCmdProc.running = false;
                                 execCmdProc.running = true;
@@ -821,7 +837,7 @@ ShellRoot {
                     Layout.fillWidth: true
 
                     Text {
-                        text: "Interfaces del Sistema"
+                        text: "Interfaces y Perfiles"
                         color: Theme.subtext
                         font.family: "JetBrainsMono Nerd Font"
                         font.pixelSize: 11
@@ -854,7 +870,7 @@ ShellRoot {
                                 spacing: 8
 
                                 Text {
-                                    text: modelData.type === "ethernet" ? "󰈀" : (modelData.type === "wifi" ? "󰤨" : "󰛳")
+                                    text: modelData.type === "ethernet" ? "󰈀" : "󰤨"
                                     color: modelData.state === "connected" ? Theme.primary : Theme.muted
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 14
@@ -877,7 +893,7 @@ ShellRoot {
                                         }
 
                                         Text {
-                                            text: "(" + (modelData.state === "connected" ? modelData.connection : "Inactiva") + ")"
+                                            text: "(" + modelData.connection + ")"
                                             color: Theme.muted
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 9
@@ -911,7 +927,7 @@ ShellRoot {
                                     Text {
                                         anchors.centerIn: parent
                                         text: "󰏫"
-                                        color: modelData.state === "connected" ? Theme.primary : Theme.muted
+                                        color: Theme.primary
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 13
                                     }
@@ -923,9 +939,9 @@ ShellRoot {
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
                                             root.netMenuOpen = false;
-                                            execCmdProc.targetCmd = "uuid=$(nmcli -g UUID,DEVICE connection show --active 2>/dev/null | awk -F: -v d='" + modelData.device + "' '$2==d{print $1; exit}'); [ -z \"$uuid\" ] && uuid=$(nmcli -g UUID,DEVICE connection show 2>/dev/null | awk -F: -v d='" + modelData.device + "' '$2==d{print $1; exit}'); if [ -n \"$uuid\" ]; then nmcli connection delete uuid \"$uuid\"; else nmcli device delete '" + modelData.device + "' 2>/dev/null || nmcli device disconnect '" + modelData.device + "'; fi";
-                                            execCmdProc.running = false;
-                                            execCmdProc.running = true;
+                                            editConnProc.targetName = modelData.device;
+                                            editConnProc.running = false;
+                                            editConnProc.running = true;
                                         }
                                     }
                                 }
@@ -967,7 +983,7 @@ ShellRoot {
                             z: -1
                             onClicked: {
                                 if (modelData.state !== "connected") {
-                                    execCmdProc.targetCmd = "nmcli device connect " + modelData.device;
+                                    execCmdProc.targetCmd = "nmcli connection up id '" + modelData.device + "'";
                                     execCmdProc.running = false;
                                     execCmdProc.running = true;
                                 }
@@ -1972,7 +1988,7 @@ ShellRoot {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 4
 
-                // Red (hoverEnabled agregado para corregir el hover)
+                // Red
                 Rectangle {
                     id: netRect
                     height: 24
@@ -2040,7 +2056,7 @@ ShellRoot {
                     MouseArea {
                         id: netMouse
                         anchors.fill: parent
-                        hoverEnabled: true // <--- Habilitado para que funcione el hover correctamente
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             root.audioMenuOpen = false;
@@ -2082,7 +2098,7 @@ ShellRoot {
                         }
 
                         Text {
-                            text: root.audioMuted ? "󰝟" : (root.audioVolumeInt === 0 ? "󰕿" : (root.audioVolumeInt < 50 ? "󰖀" : "󰕾"))
+                            text: root.audioMuted ? "󰝟" : (root.audioVolumeInt === 0 ? "󰕿" : (root.audioVolumeInt < 50 ? "0" : "󰕾"))
                             color: root.audioMenuOpen ? Theme.primaryHover : (root.audioMuted ? Theme.danger : Theme.primary)
                             font.family: "JetBrainsMono Nerd Font"
                             font.pixelSize: 12
