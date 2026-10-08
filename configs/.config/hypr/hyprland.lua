@@ -411,6 +411,3 @@ hl.window_rule({
     center      = true,
     size        = "460 520",
 })
-
--- HyprMod managed settings
-require("hyprland-gui")
