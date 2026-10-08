@@ -40,6 +40,8 @@ APPS=(
     "yazi"
     "hyprmod"
     "hyprshot"
+    "discord"
+    "bitwarden"
 )
 
 for app in "${APPS[@]}"; do
