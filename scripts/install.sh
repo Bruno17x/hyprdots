@@ -42,6 +42,11 @@ APPS=(
     "hyprshot"
     "discord"
     "bitwarden"
+    "mangohud"
+    "mesa"
+    "lib32-mesa"
+    "vulkan-radeon"
+    "lib32-vulkan-radeon "
 )
 
 for app in "${APPS[@]}"; do
