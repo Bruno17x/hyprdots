@@ -707,7 +707,6 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: Component {
-            // Se usa el nombre único de la pantalla (modelData.name) como identificador del variant
             Item {
                 id: monitorRoot
                 required property var modelData
@@ -1792,14 +1791,15 @@ ShellRoot {
                         }
                     }
 
+                    // --- PROCESO DE GPU CONFIGURADO EXCLUSIVAMENTE PARA CARD1 ---
                     property string gpuUsage: "0%"
                     Process {
                         id: gpuProc
-                        command: ["sh", "-c", "if which nvidia-smi >/dev/null 2>&1; then nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits | head -n1 | awk '{print $1\"%\"}'; elif [ -f /sys/class/drm/card0/device/gpu_busy_percent ]; then awk '{print $1\"%\"}' /sys/class/drm/card0/device/gpu_busy_percent; elif [ -f /sys/class/drm/card1/device/gpu_busy_percent ]; then awk '{print $1\"%\"}' /sys/class/drm/card1/device/gpu_busy_percent; else echo '0%'; fi"]
+                        command: ["sh", "-c", "if which nvidia-smi >/dev/null 2>&1; then nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits | head -n1 | awk '{print $1\"%\"}'; elif [ -f /sys/class/drm/card1/device/gpu_busy_percent ]; then awk '{print $1\"%\"}' /sys/class/drm/card1/device/gpu_busy_percent; else echo '0%'; fi"]
                         stdout: SplitParser {
                             onRead: line => {
                                 var val = line.trim();
-                                if (val.length > 0) bar.gpuUsage = val;
+                                if (val.length > 0) bar.gpuUsage = val.includes("%") ? val : val + "%";
                             }
                         }
                     }
