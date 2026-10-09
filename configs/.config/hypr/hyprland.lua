@@ -68,7 +68,8 @@ local menu        = "rofi -show drun"
 -- Or execute your favorite apps at launch like this:
 --
 hl.on("hyprland.start", function () 
-  hl.exec_cmd("/usr/bin/quickshell")
+  hl.exec_cmd("quickshell")
+  hl.exec_cmd("python ~/.local/bin/mangohud-to-quickshell.py")
 end)
 
 
@@ -81,6 +82,7 @@ end)
 hl.env("XCURSOR_SIZE", "24")
 hl.env("HYPRCURSOR_SIZE", "24")
 --hl.env("GTK_THEME", "purple")
+hl.env("MANGOHUD", "1")
 
 -----------------------
 ----- PERMISSIONS -----
@@ -411,3 +413,6 @@ hl.window_rule({
     center      = true,
     size        = "460 520",
 })
+
+-- HyprMod managed settings
+require("hyprland-gui")
