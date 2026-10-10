@@ -542,7 +542,6 @@ ShellRoot {
                     Item {
                         anchors.fill: parent
 
-                        // Fondo transparente que detecta clics fuera para cerrar el calendario
                         MouseArea {
                             anchors.fill: parent
                             onClicked: monitorRoot.calendarMenuOpen = false
@@ -560,7 +559,6 @@ ShellRoot {
                             bottomRightRadius: 10
                             clip: true
 
-                            // Absorbe los clics dentro del calendario para evitar que lleguen al fondo
                             MouseArea {
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
@@ -610,7 +608,6 @@ ShellRoot {
                                        displayYear === today.getFullYear();
                             }
 
-                            // Contenedor principal con márgenes idénticos de 16px en los 4 lados
                             Item {
                                 anchors.fill: parent
                                 anchors.margins: 16
@@ -678,7 +675,6 @@ ShellRoot {
                                         }
                                     }
 
-                                    // Cuadrícula compacta y alineada
                                     GridLayout {
                                         Layout.alignment: Qt.AlignHCenter
                                         columns: 7
@@ -752,8 +748,7 @@ ShellRoot {
                         id: themeMenuContainer
                         anchors.fill: parent
                         color: Theme.bg
-                        border.width: 1
-                        border.color: Theme.border
+                        border.width: 0  // <-- Modificado aquí para quitar el borde
                         bottomLeftRadius: 10
                         clip: true
 
