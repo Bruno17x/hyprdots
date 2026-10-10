@@ -84,8 +84,8 @@ ShellRoot {
             "  name=$1; " +
             "  type=($2 ~ /wireless|802-11-wireless/ ? \"wifi\" : \"ethernet\"); " +
             "  state=($4 == \"activated\" ? \"connected\" : \"disconnected\"); " +
-            "  dev=($3 != \"\" ? $3 : \"en espera\"); " +
-            "  print name \"|\" type \"|\" state \"|\" dev \"|\" ($4 == \"activated\" ? \"Conectado\" : \"Guardado\"); " +
+            "  dev=($3 != \"\" ? $3 : \"waiting\"); " +
+            "  print name \"|\" type \"|\" state \"|\" dev \"|\" ($4 == \"activated\" ? \"Connected\" : \"Saved\"); " +
             "}'"
         ]
         stdout: SplitParser {
@@ -122,7 +122,7 @@ ShellRoot {
                         inUse: parts[0] === "*",
                         ssid: parts[1],
                         signal: parts[2],
-                        security: parts[3] || "Abierta"
+                        security: parts[3] || "Open"
                     });
                     root.wifiList = l;
                 }
@@ -309,7 +309,8 @@ ShellRoot {
                 property bool audioMenuOpen: false
                 property bool micMenuOpen: false
                 property bool themeMenuOpen: false
-                property bool sessionMenuOpen: false // <--- GESTIONADO DE FORMA INDEPENDIENTE POR MONITOR
+                property bool sessionMenuOpen: false
+                property bool calendarMenuOpen: false
                 property var wallpapersList: []
 
                 Process {
@@ -360,7 +361,7 @@ ShellRoot {
                     }
                 }
 
-                // --- MENÚ DESPLEGABLE: SESIÓN / APAGADO (Movido por monitor) ---
+                // --- MENÚ DESPLEGABLE: SESIÓN / APAGADO (TRADUCIDO) ---
                 PanelWindow {
                     id: sessionDropdown
                     screen: monitorRoot.modelData
@@ -417,7 +418,7 @@ ShellRoot {
                                     }
 
                                     Text {
-                                        text: "Apagar"
+                                        text: "Shut down"
                                         color: Theme.text
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 11
@@ -457,7 +458,7 @@ ShellRoot {
                                     }
 
                                     Text {
-                                        text: "Reiniciar"
+                                        text: "Reboot"
                                         color: Theme.text
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 11
@@ -497,7 +498,7 @@ ShellRoot {
                                     }
 
                                     Text {
-                                        text: "Cerrar sesión"
+                                        text: "Log out"
                                         color: Theme.text
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 11
@@ -514,6 +515,216 @@ ShellRoot {
                                         monitorRoot.sessionMenuOpen = false;
                                         sessionLogoutProc.running = false;
                                         sessionLogoutProc.running = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- MENÚ DESPLEGABLE DE CALENDARIO CENTRADO Y SUPERPUESTO (OVERLAY) ---
+                PanelWindow {
+                    id: calendarDropdown
+                    screen: monitorRoot.modelData
+
+                    anchors {
+                        top: true
+                        left: true
+                        right: true
+                        bottom: true
+                    }
+                    visible: monitorRoot.calendarMenuOpen
+                    color: "transparent"
+
+                    WlrLayershell.layer: WlrLayer.Top
+                    WlrLayershell.namespace: "quickshell-bar"
+
+                    Item {
+                        anchors.fill: parent
+
+                        // Fondo transparente que detecta clics fuera para cerrar el calendario
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: monitorRoot.calendarMenuOpen = false
+                        }
+
+                        Rectangle {
+                            id: calendarMenuContainer
+                            anchors.top: parent.top
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 320
+                            height: 300
+                            color: Theme.bg
+                            border.width: 0
+                            bottomLeftRadius: 10
+                            bottomRightRadius: 10
+                            clip: true
+
+                            // Absorbe los clics dentro del calendario para evitar que lleguen al fondo
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                                onClicked: mouse => mouse.accepted = true
+                                onPressed: mouse => mouse.accepted = true
+                                onReleased: mouse => mouse.accepted = true
+                                onWheel: wheel => wheel.accepted = true
+                            }
+
+                            transform: Translate {
+                                y: monitorRoot.calendarMenuOpen ? 0 : -calendarMenuContainer.height
+                                Behavior on y { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                            }
+
+                            opacity: monitorRoot.calendarMenuOpen ? 1.0 : 0.0
+                            Behavior on opacity { NumberAnimation { duration: 130 } }
+
+                            property var currentDate: new Date()
+                            property int displayYear: currentDate.getFullYear()
+                            property int displayMonth: currentDate.getMonth()
+
+                            function getMonthName(m) {
+                                var names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+                                return names[m];
+                            }
+
+                            function getCalendarDays(year, month) {
+                                var firstDay = new Date(year, month, 1).getDay();
+                                firstDay = (firstDay + 6) % 7; 
+                                var totalDays = new Date(year, month + 1, 0).getDate();
+                                var daysArray = [];
+
+                                for (var i = 0; i < firstDay; i++) {
+                                    daysArray.push({ day: "", isCurrent: false });
+                                }
+                                for (var d = 1; d <= totalDays; d++) {
+                                    daysArray.push({ day: d, isCurrent: true });
+                                }
+                                return daysArray;
+                            }
+
+                            function isToday(dayNum) {
+                                var today = new Date();
+                                return dayNum !== "" &&
+                                       dayNum === today.getDate() &&
+                                       displayMonth === today.getMonth() &&
+                                       displayYear === today.getFullYear();
+                            }
+
+                            // Contenedor principal con márgenes idénticos de 16px en los 4 lados
+                            Item {
+                                anchors.fill: parent
+                                anchors.margins: 16
+                                z: 2
+
+                                ColumnLayout {
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    spacing: 10
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Layout.leftMargin: 4
+                                        Layout.rightMargin: 4
+
+                                        Text {
+                                            text: "←"
+                                            color: Theme.primary
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 14
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (calendarMenuContainer.displayMonth === 0) {
+                                                        calendarMenuContainer.displayMonth = 11;
+                                                        calendarMenuContainer.displayYear -= 1;
+                                                    } else {
+                                                        calendarMenuContainer.displayMonth -= 1;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+
+                                        Text {
+                                            text: calendarMenuContainer.getMonthName(calendarMenuContainer.displayMonth) + " " + calendarMenuContainer.displayYear
+                                            color: Theme.text
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+
+                                        Text {
+                                            text: "→"
+                                            color: Theme.primary
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 14
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (calendarMenuContainer.displayMonth === 11) {
+                                                        calendarMenuContainer.displayMonth = 0;
+                                                        calendarMenuContainer.displayYear += 1;
+                                                    } else {
+                                                        calendarMenuContainer.displayMonth += 1;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Cuadrícula compacta y alineada
+                                    GridLayout {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        columns: 7
+                                        rowSpacing: 4
+                                        columnSpacing: 4
+
+                                        Repeater {
+                                            model: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+                                            delegate: Item {
+                                                width: 38
+                                                height: 24
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData
+                                                    color: Theme.primary
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                }
+                                            }
+                                        }
+
+                                        Repeater {
+                                            model: calendarMenuContainer.getCalendarDays(calendarMenuContainer.displayYear, calendarMenuContainer.displayMonth)
+                                            delegate: Item {
+                                                width: 38
+                                                height: 32
+
+                                                Rectangle {
+                                                    anchors.centerIn: parent
+                                                    width: 32
+                                                    height: 26
+                                                    radius: 6
+                                                    color: calendarMenuContainer.isToday(modelData.day) ? Theme.primary : Theme.surface
+
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: modelData.day
+                                                        color: calendarMenuContainer.isToday(modelData.day) ? "#11111b" : Theme.text
+                                                        font.family: "JetBrainsMono Nerd Font"
+                                                        font.pixelSize: 11
+                                                        font.bold: modelData.day !== ""
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -560,12 +771,12 @@ ShellRoot {
                             spacing: 16
 
                             ColumnLayout {
-                                Layout.preferredWidth: 24
+                                Layout.preferredWidth: 17
                                 Layout.fillHeight: true
                                 spacing: 8
 
                                 Text {
-                                    text: "Tema"
+                                    text: "Theme"
                                     color: Theme.text
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
@@ -616,7 +827,6 @@ ShellRoot {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                monitorRoot.themeMenuOpen = false;
                                                 Theme.currentTheme = modelData;
                                                 var wallpaperPath = Theme.themes[modelData].wallpaper;
                                                 
@@ -651,7 +861,7 @@ ShellRoot {
                                 spacing: 8
 
                                 Text {
-                                    text: "Cambiar Fondo"
+                                    text: "Wallpaper"
                                     color: Theme.text
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
@@ -695,8 +905,6 @@ ShellRoot {
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: {
-                                                    monitorRoot.themeMenuOpen = false;
-                                                    
                                                     wallpaperExec.targetPath = modelData;
                                                     wallpaperExec.running = false;
                                                     wallpaperExec.running = true;
@@ -756,7 +964,7 @@ ShellRoot {
                                 spacing: 8
 
                                 Text {
-                                    text: "Conexiones de Red"
+                                    text: "Network Connections"
                                     color: Theme.text
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
@@ -813,7 +1021,7 @@ ShellRoot {
                                 Layout.fillWidth: true
 
                                 Text {
-                                    text: "Interfaces y Perfiles"
+                                    text: "Interfaces & Profiles"
                                     color: Theme.subtext
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 11
@@ -978,7 +1186,7 @@ ShellRoot {
                                 Layout.fillWidth: true
 
                                 Text {
-                                    text: "Redes Wi-Fi"
+                                    text: "Wi-Fi Networks"
                                     color: Theme.subtext
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 11
@@ -1035,7 +1243,7 @@ ShellRoot {
                                         spacing: 8
 
                                         Text {
-                                            text: modelData.security !== "Abierta" && modelData.security !== "" ? "󰤪" : "󰤨"
+                                            text: modelData.security !== "Open" && modelData.security !== "" ? "󰤪" : "󰤨"
                                             color: modelData.inUse ? Theme.primary : Theme.primaryHover
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 12
@@ -1081,7 +1289,7 @@ ShellRoot {
                             }
 
                             Text {
-                                text: "Túneles VPN / WireGuard"
+                                text: "VPN / WireGuard Tunnels"
                                 color: Theme.subtext
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 11
@@ -1130,7 +1338,7 @@ ShellRoot {
                                             }
 
                                             Text {
-                                                text: modelData.active ? "Activo" : "Conectar"
+                                                text: modelData.active ? "Active" : "Connect"
                                                 color: modelData.active ? Theme.primary : Theme.primaryHover
                                                 font.family: "JetBrainsMono Nerd Font"
                                                 font.pixelSize: 10
@@ -1233,7 +1441,7 @@ ShellRoot {
                                 spacing: 8
 
                                 Text {
-                                    text: "Control de Salida"
+                                    text: "Output Control"
                                     color: Theme.text
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
@@ -1318,7 +1526,7 @@ ShellRoot {
                                         }
 
                                         Text {
-                                            text: "Volumen Salida"
+                                            text: "Output Volume"
                                             color: Theme.text
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 11
@@ -1376,7 +1584,7 @@ ShellRoot {
                             }
 
                             Text {
-                                text: "Dispositivos de Salida"
+                                text: "Output Devices"
                                 color: Theme.subtext
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 11
@@ -1489,7 +1697,7 @@ ShellRoot {
                                 spacing: 8
 
                                 Text {
-                                    text: "Control de Entrada"
+                                    text: "Input Control"
                                     color: Theme.text
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
@@ -1574,7 +1782,7 @@ ShellRoot {
                                         }
 
                                         Text {
-                                            text: "Ganancia de Entrada"
+                                            text: "Input Gain"
                                             color: Theme.text
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 11
@@ -1632,7 +1840,7 @@ ShellRoot {
                             }
 
                             Text {
-                                text: "Dispositivos de Entrada"
+                                text: "Input Devices"
                                 color: Theme.subtext
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 11
@@ -1649,7 +1857,7 @@ ShellRoot {
                                 delegate: Rectangle {
                                     width: ListView.view.width
                                     height: 36
-                                    color: modelData.active ? Theme.surfaceAlt : (sourceMouse.containsMouse ? Theme.surface : "transparent")
+                                    color: modelData.active ? Theme.surfaceAlt : (sinkMouse.containsMouse ? Theme.surface : "transparent")
                                     border.color: modelData.active ? Theme.primary : "transparent"
                                     border.width: modelData.active ? 1 : 0
                                     radius: 5
@@ -1941,8 +2149,8 @@ ShellRoot {
 
                             Text {
                                 text: (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id < 0)
-                                      ? "Special"
-                                      : "Desktop"
+                                     ? "Special"
+                                     : "Desktop"
                                 color: Theme.subtext
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 12
@@ -1950,32 +2158,53 @@ ShellRoot {
                         }
 
                         // --- CENTRO ---
-                        RowLayout {
+                        Item {
                             anchors.centerIn: parent
-                            spacing: 8
+                            width: centerLayout.implicitWidth
+                            height: parent.height
 
-                            property var date: new Date()
+                            RowLayout {
+                                id: centerLayout
+                                anchors.centerIn: parent
+                                spacing: 8
 
-                            Timer {
-                                interval: 1000
-                                running: true
-                                repeat: true
-                                onTriggered: parent.date = new Date()
+                                property var date: new Date()
+
+                                Timer {
+                                    interval: 1000
+                                    running: true
+                                    repeat: true
+                                    onTriggered: parent.date = new Date()
+                                }
+
+                                Text {
+                                    text: Qt.formatDateTime(parent.date, "dd MMM")
+                                    color: Theme.subtext
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                }
+
+                                Text {
+                                    text: Qt.formatDateTime(parent.date, "hh:mm AP")
+                                    color: Theme.text
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
                             }
 
-                            Text {
-                                text: Qt.formatDateTime(parent.date, "dd MMM")
-                                color: Theme.subtext
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 12
-                            }
-
-                            Text {
-                                text: Qt.formatDateTime(parent.date, "hh:mm AP")
-                                color: Theme.text
-                                font.family: "JetBrainsMono Nerd Font"
-                                font.pixelSize: 12
-                                font.bold: true
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    monitorRoot.netMenuOpen = false;
+                                    monitorRoot.audioMenuOpen = false;
+                                    monitorRoot.micMenuOpen = false;
+                                    monitorRoot.themeMenuOpen = false;
+                                    monitorRoot.sessionMenuOpen = false;
+                                    monitorRoot.calendarMenuOpen = !monitorRoot.calendarMenuOpen;
+                                }
                             }
                         }
 
@@ -2134,6 +2363,7 @@ ShellRoot {
                                         monitorRoot.micMenuOpen = false;
                                         monitorRoot.themeMenuOpen = false;
                                         monitorRoot.sessionMenuOpen = false;
+                                        monitorRoot.calendarMenuOpen = false;
                                         monitorRoot.netMenuOpen = !monitorRoot.netMenuOpen;
                                         if (monitorRoot.netMenuOpen) {
                                             root.refreshAllNetworks();
@@ -2193,6 +2423,7 @@ ShellRoot {
                                             monitorRoot.micMenuOpen = false;
                                             monitorRoot.themeMenuOpen = false;
                                             monitorRoot.sessionMenuOpen = false;
+                                            monitorRoot.calendarMenuOpen = false;
                                             monitorRoot.audioMenuOpen = !monitorRoot.audioMenuOpen;
                                             if (monitorRoot.audioMenuOpen) {
                                                 root.refreshAudio();
@@ -2267,6 +2498,7 @@ ShellRoot {
                                             monitorRoot.audioMenuOpen = false;
                                             monitorRoot.themeMenuOpen = false;
                                             monitorRoot.sessionMenuOpen = false;
+                                            monitorRoot.calendarMenuOpen = false;
                                             monitorRoot.micMenuOpen = !monitorRoot.micMenuOpen;
                                             if (monitorRoot.micMenuOpen) {
                                                 root.refreshMic();
@@ -2319,6 +2551,7 @@ ShellRoot {
                                         monitorRoot.audioMenuOpen = false;
                                         monitorRoot.micMenuOpen = false;
                                         monitorRoot.sessionMenuOpen = false;
+                                        monitorRoot.calendarMenuOpen = false;
                                         monitorRoot.themeMenuOpen = !monitorRoot.themeMenuOpen;
                                     }
                                 }
@@ -2384,6 +2617,7 @@ ShellRoot {
                                         monitorRoot.audioMenuOpen = false;
                                         monitorRoot.micMenuOpen = false;
                                         monitorRoot.themeMenuOpen = false;
+                                        monitorRoot.calendarMenuOpen = false;
                                         monitorRoot.sessionMenuOpen = !monitorRoot.sessionMenuOpen;
                                     }
                                 }
