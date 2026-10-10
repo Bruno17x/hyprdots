@@ -8,8 +8,6 @@ import QtQuick.Layouts
 ShellRoot {
     id: root
 
-    property bool themeMenuOpen: false
-    property bool sessionMenuOpen: false
     property bool wifiEnabled: true
 
     property bool confirmDeleteOpen: false
@@ -48,10 +46,14 @@ ShellRoot {
         running: true
         command: [
             "sh", "-c",
-            "pgrep -x swaybg > /dev/null || (" +
-            "[ -f ~/.config/quickshell/current_theme.txt ] && theme=$(cat ~/.config/quickshell/current_theme.txt | tr -d '\\n') || theme='purple'; " +
-            "swaybg -o '*' -i \"$HOME/wallpapers/$theme.jpeg\" -m fill &" +
-            ")"
+            "if [ -f ~/.config/quickshell/current_wallpaper.txt ]; then " +
+            "  bg=$(cat ~/.config/quickshell/current_wallpaper.txt | tr -d '\\n'); " +
+            "else " +
+            "  [ -f ~/.config/quickshell/current_theme.txt ] && theme=$(cat ~/.config/quickshell/current_theme.txt | tr -d '\\n') || theme='purple'; " +
+            "  bg=\"$HOME/wallpapers/$theme.jpeg\"; " +
+            "fi; " +
+            "pkill swaybg 2>/dev/null || true; " +
+            "swaybg -o '*' -i \"$bg\" -m fill &"
         ]
     }
 
@@ -283,427 +285,19 @@ ShellRoot {
         id: themeExec
     }
 
-    // --- MENÚ DESPLEGABLE: SELECTOR DE TEMAS ---
-    Variants {
-        model: Quickshell.screens
-        delegate: Component {
-            PanelWindow {
-                id: themeDropdown
-                required property var modelData
-                screen: modelData
-
-                anchors {
-                    top: true
-                    right: true
-                }
-                width: 250
-                height: 230
-                visible: root.themeMenuOpen
-                color: "transparent"
-
-                WlrLayershell.layer: WlrLayer.Overlay
-                WlrLayershell.namespace: "quickshell-bar"
-
-                Rectangle {
-                    id: themeMenuContainer
-                    anchors.fill: parent
-                    color: Theme.bg
-                    border.width: 0
-                    bottomLeftRadius: 10
-                    clip: true
-
-                    transform: Translate {
-                        y: root.themeMenuOpen ? 0 : -themeMenuContainer.height
-                        Behavior on y { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-                    }
-
-                    opacity: root.themeMenuOpen ? 1.0 : 0.0
-                    Behavior on opacity { NumberAnimation { duration: 130 } }
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 12
-                        spacing: 8
-
-                        Text {
-                            text: "Seleccionar Tema"
-                            color: Theme.text
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
-                            font.bold: true
-                            Layout.alignment: Qt.AlignHCenter
-                        }
-
-                        Grid {
-                            id: themeGrid
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            columns: 2
-                            spacing: 8
-
-                            Repeater {
-                                model: ["purple", "red", "blue", "white"]
-
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    width: 108
-                                    height: 80
-                                    radius: 6
-                                    color: Theme.currentTheme === modelData ? Theme.surfaceAlt : Theme.surface
-                                    border.color: Theme.currentTheme === modelData ? Theme.primary : Theme.border
-                                    border.width: Theme.currentTheme === modelData ? 2 : 1
-                                    clip: true
-
-                                    Image {
-                                        anchors.fill: parent
-                                        anchors.margins: 2
-                                        source: "file://" + Theme.themes[modelData].wallpaper
-                                        fillMode: Image.PreserveAspectCrop
-                                        opacity: 0.65
-                                    }
-
-                                    Rectangle {
-                                        anchors.bottom: parent.bottom
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        height: 22
-                                        color: "#99000000"
-                                        bottomLeftRadius: 6
-                                        bottomRightRadius: 6
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: Theme.themes[modelData].name
-                                            color: Theme.text
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 10
-                                            font.bold: true
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: themeItemMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            root.themeMenuOpen = false;
-                                            Theme.currentTheme = modelData;
-                                            themeExec.command = [
-                                                "sh", "-c",
-                                                "mkdir -p ~/.config/quickshell && echo -n '" + modelData + "' > ~/.config/quickshell/current_theme.txt && " +
-                                                "gsettings set org.gnome.desktop.interface gtk-theme '" + modelData + "' && " +
-                                                "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' && " +
-                                                "pkill swaybg; swaybg -o '*' -i \"$HOME/wallpapers/" + modelData + ".jpeg\" -m fill & " +
-                                                "[ -f ~/.config/kitty/themes/" + modelData + ".conf ] && cp ~/.config/kitty/themes/" + modelData + ".conf ~/.config/kitty/current-theme.conf && pkill -SIGUSR1 kitty"
-                                            ];
-                                            themeExec.running = false;
-                                            themeExec.running = true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    Process {
+        id: wallpaperExec
+        property string targetPath: ""
+        command: ["swaybg", "-o", "*", "-i", targetPath, "-m", "fill"]
     }
 
-    // --- MENÚ DESPLEGABLE: SESIÓN / APAGADO ---
-    Variants {
-        model: Quickshell.screens
-        delegate: Component {
-            PanelWindow {
-                id: sessionDropdown
-                required property var modelData
-                screen: modelData
-
-                anchors {
-                    top: true
-                    right: true
-                }
-                width: 200
-                height: 155
-                visible: root.sessionMenuOpen
-                color: "transparent"
-
-                WlrLayershell.layer: WlrLayer.Overlay
-                WlrLayershell.namespace: "quickshell-bar"
-
-                Rectangle {
-                    id: sessionMenuContainer
-                    anchors.fill: parent
-                    color: Theme.bg
-                    border.width: 0
-                    bottomLeftRadius: 10
-                    clip: true
-
-                    transform: Translate {
-                        y: root.sessionMenuOpen ? 0 : -sessionMenuContainer.height
-                        Behavior on y { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-                    }
-
-                    opacity: root.sessionMenuOpen ? 1.0 : 0.0
-                    Behavior on opacity { NumberAnimation { duration: 130 } }
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 6
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 38
-                            radius: 6
-                            color: pwrBtnMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                spacing: 10
-
-                                Text {
-                                    text: "⏻"
-                                    color: pwrBtnMouse.containsMouse ? Theme.primaryHover : Theme.primary
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 14
-                                }
-
-                                Text {
-                                    text: "Apagar"
-                                    color: Theme.text
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                }
-                            }
-
-                            MouseArea {
-                                id: pwrBtnMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.sessionMenuOpen = false;
-                                    sessionPoweroffProc.running = false;
-                                    sessionPoweroffProc.running = true;
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 38
-                            radius: 6
-                            color: rbtBtnMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                spacing: 10
-
-                                Text {
-                                    text: "󰑐"
-                                    color: rbtBtnMouse.containsMouse ? Theme.primaryHover : Theme.primary
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 14
-                                }
-
-                                Text {
-                                    text: "Reiniciar"
-                                    color: Theme.text
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                }
-                            }
-
-                            MouseArea {
-                                id: rbtBtnMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.sessionMenuOpen = false;
-                                    sessionRebootProc.running = false;
-                                    sessionRebootProc.running = true;
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            height: 38
-                            radius: 6
-                            color: lgtBtnMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
-
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                spacing: 10
-
-                                Text {
-                                    text: "󰗼"
-                                    color: lgtBtnMouse.containsMouse ? Theme.primaryHover : Theme.primary
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 14
-                                }
-
-                                Text {
-                                    text: "Cerrar sesión"
-                                    color: Theme.text
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                }
-                            }
-
-                            MouseArea {
-                                id: lgtBtnMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.sessionMenuOpen = false;
-                                    sessionLogoutProc.running = false;
-                                    sessionLogoutProc.running = true;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    Process {
+        id: saveWallpaperConfigExec
+        property string targetPath: ""
+        command: ["sh", "-c", "mkdir -p ~/.config/quickshell && printf '%s' " + JSON.stringify(targetPath) + " > ~/.config/quickshell/current_wallpaper.txt"]
     }
 
-    // --- DIÁLOGO MODAL DE CONFIRMACIÓN PARA ELIMINAR ---
-    Variants {
-        model: Quickshell.screens
-        delegate: Component {
-            PanelWindow {
-                id: confirmDialogWindow
-                required property var modelData
-                screen: modelData
-
-                anchors {
-                    top: true
-                    bottom: true
-                    left: true
-                    right: true
-                }
-                visible: root.confirmDeleteOpen
-                color: "#66000000"
-
-                WlrLayershell.layer: WlrLayer.Overlay
-                WlrLayershell.namespace: "quickshell-modal"
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 300
-                    height: 140
-                    color: "#181825"
-                    radius: 8
-                    border.color: Theme.border
-                    border.width: 1
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 14
-                        spacing: 12
-
-                        Text {
-                            text: root.targetDeleteType === "vpn"
-                                  ? "¿Eliminar VPN '" + root.targetDeleteName + "'?"
-                                  : "¿Borrar conexión de " + root.targetDeleteName + "?"
-                            color: Theme.text
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 12
-                            font.bold: true
-                            elide: Text.ElideRight
-                            Layout.maximumWidth: 270
-                            Layout.alignment: Qt.AlignHCenter
-                        }
-
-                        Text {
-                            text: root.targetDeleteType === "vpn"
-                                  ? "Se eliminará permanentemente la configuración de esta VPN."
-                                  : "Se eliminará el perfil de NetworkManager asignado a esta interfaz."
-                            color: Theme.subtext
-                            font.family: "JetBrainsMono Nerd Font"
-                            font.pixelSize: 10
-                            wrapMode: Text.WordWrap
-                            Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 10
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 30
-                                radius: 5
-                                color: cancelMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Cancelar"
-                                    color: Theme.text
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                }
-
-                                MouseArea {
-                                    id: cancelMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.confirmDeleteOpen = false
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 30
-                                radius: 5
-                                color: deleteMouse.containsMouse ? Theme.primaryHover : Theme.primary
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Eliminar"
-                                    color: "#11111b"
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 11
-                                    font.bold: true
-                                }
-
-                                MouseArea {
-                                    id: deleteMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        root.confirmDeleteOpen = false;
-                                        if (root.targetDeleteType === "vpn") {
-                                            execCmdProc.targetCmd = "nmcli connection delete id '" + root.targetDeleteName + "'";
-                                        } else {
-                                            execCmdProc.targetCmd = "nmcli connection delete id '" + root.targetDeleteName + "' 2>/dev/null || nmcli device disconnect '" + root.targetDeleteName + "'";
-                                        }
-                                        execCmdProc.running = false;
-                                        execCmdProc.running = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // --- BLOQUE PRINCIPAL MULTIPANTALLA (Barra y Menús independientes por monitor) ---
+    // --- DIÁLOGOS MODALES Y MENÚS POR MONITOR ---
     Variants {
         model: Quickshell.screens
         delegate: Component {
@@ -714,8 +308,27 @@ ShellRoot {
                 property bool netMenuOpen: false
                 property bool audioMenuOpen: false
                 property bool micMenuOpen: false
+                property bool themeMenuOpen: false
+                property bool sessionMenuOpen: false // <--- GESTIONADO DE FORMA INDEPENDIENTE POR MONITOR
+                property var wallpapersList: []
 
-                // 1. Capa para detectar clics fuera (Solo en esta pantalla)
+                Process {
+                    id: scanWallpapersProc
+                    running: true
+                    command: ["sh", "-c", "find \"$HOME/wallpapers\" -type f \\( -name '*.jpeg' -o -name '*.jpg' -o -name '*.png' \\) 2>/dev/null"]
+                    stdout: SplitParser {
+                        onRead: line => {
+                            var path = line.trim();
+                            if (path.length > 0) {
+                                var current = [];
+                                for (var i = 0; i < monitorRoot.wallpapersList.length; i++) current.push(monitorRoot.wallpapersList[i]);
+                                current.push(path);
+                                monitorRoot.wallpapersList = current;
+                            }
+                        }
+                    }
+                }
+
                 PanelWindow {
                     id: dismissLayer
                     screen: monitorRoot.modelData
@@ -725,7 +338,7 @@ ShellRoot {
                         left: true
                         right: true
                     }
-                    visible: monitorRoot.netMenuOpen || monitorRoot.audioMenuOpen || monitorRoot.micMenuOpen || root.confirmDeleteOpen
+                    visible: monitorRoot.netMenuOpen || monitorRoot.audioMenuOpen || monitorRoot.micMenuOpen || monitorRoot.themeMenuOpen || monitorRoot.sessionMenuOpen || root.confirmDeleteOpen
                     color: "transparent"
 
                     WlrLayershell.layer: WlrLayer.Top
@@ -740,6 +353,362 @@ ShellRoot {
                                 monitorRoot.netMenuOpen = false;
                                 monitorRoot.audioMenuOpen = false;
                                 monitorRoot.micMenuOpen = false;
+                                monitorRoot.themeMenuOpen = false;
+                                monitorRoot.sessionMenuOpen = false;
+                            }
+                        }
+                    }
+                }
+
+                // --- MENÚ DESPLEGABLE: SESIÓN / APAGADO (Movido por monitor) ---
+                PanelWindow {
+                    id: sessionDropdown
+                    screen: monitorRoot.modelData
+
+                    anchors {
+                        top: true
+                        right: true
+                    }
+                    width: 200
+                    height: 155
+                    visible: monitorRoot.sessionMenuOpen
+                    color: "transparent"
+
+                    WlrLayershell.layer: WlrLayer.Overlay
+                    WlrLayershell.namespace: "quickshell-bar"
+
+                    Rectangle {
+                        id: sessionMenuContainer
+                        anchors.fill: parent
+                        color: Theme.bg
+                        border.width: 0
+                        bottomLeftRadius: 10
+                        clip: true
+
+                        transform: Translate {
+                            y: monitorRoot.sessionMenuOpen ? 0 : -sessionMenuContainer.height
+                            Behavior on y { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                        }
+
+                        opacity: monitorRoot.sessionMenuOpen ? 1.0 : 0.0
+                        Behavior on opacity { NumberAnimation { duration: 130 } }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 6
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 38
+                                radius: 6
+                                color: pwrBtnMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    spacing: 10
+
+                                    Text {
+                                        text: "⏻"
+                                        color: pwrBtnMouse.containsMouse ? Theme.primaryHover : Theme.primary
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 14
+                                    }
+
+                                    Text {
+                                        text: "Apagar"
+                                        color: Theme.text
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: pwrBtnMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        monitorRoot.sessionMenuOpen = false;
+                                        sessionPoweroffProc.running = false;
+                                        sessionPoweroffProc.running = true;
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 38
+                                radius: 6
+                                color: rbtBtnMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    spacing: 10
+
+                                    Text {
+                                        text: "󰑐"
+                                        color: rbtBtnMouse.containsMouse ? Theme.primaryHover : Theme.primary
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 14
+                                    }
+
+                                    Text {
+                                        text: "Reiniciar"
+                                        color: Theme.text
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: rbtBtnMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        monitorRoot.sessionMenuOpen = false;
+                                        sessionRebootProc.running = false;
+                                        sessionRebootProc.running = true;
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 38
+                                radius: 6
+                                color: lgtBtnMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    spacing: 10
+
+                                    Text {
+                                        text: "󰗼"
+                                        color: lgtBtnMouse.containsMouse ? Theme.primaryHover : Theme.primary
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 14
+                                    }
+
+                                    Text {
+                                        text: "Cerrar sesión"
+                                        color: Theme.text
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 11
+                                        font.bold: true
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: lgtBtnMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        monitorRoot.sessionMenuOpen = false;
+                                        sessionLogoutProc.running = false;
+                                        sessionLogoutProc.running = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // --- MENÚ DE PERSONALIZACIÓN ---
+                PanelWindow {
+                    id: themeDropdown
+                    screen: monitorRoot.modelData
+                    anchors {
+                        top: true
+                        right: true
+                    }
+                    width: 700
+                    height: 380
+                    visible: monitorRoot.themeMenuOpen
+                    color: "transparent"
+
+                    WlrLayershell.layer: WlrLayer.Overlay
+                    WlrLayershell.namespace: "quickshell-bar"
+
+                    Rectangle {
+                        id: themeMenuContainer
+                        anchors.fill: parent
+                        color: Theme.bg
+                        border.width: 1
+                        border.color: Theme.border
+                        bottomLeftRadius: 10
+                        clip: true
+
+                        transform: Translate {
+                            y: monitorRoot.themeMenuOpen ? 0 : -themeMenuContainer.height
+                            Behavior on y { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                        }
+
+                        opacity: monitorRoot.themeMenuOpen ? 1.0 : 0.0
+                        Behavior on opacity { NumberAnimation { duration: 130 } }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 16
+
+                            ColumnLayout {
+                                Layout.preferredWidth: 24
+                                Layout.fillHeight: true
+                                spacing: 8
+
+                                Text {
+                                    text: "Tema"
+                                    color: Theme.text
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    Layout.alignment: Qt.AlignHCenter
+                                }
+
+                                ListView {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    model: ["purple", "red", "blue", "white"]
+                                    spacing: 6
+                                    clip: true
+
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        width: 130
+                                        height: 36
+                                        radius: 5
+                                        color: Theme.currentTheme === modelData ? Theme.surfaceAlt : Theme.surface
+                                        border.color: Theme.currentTheme === modelData ? Theme.primary : Theme.border
+                                        border.width: Theme.currentTheme === modelData ? 2 : 1
+
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: 6
+
+                                            Rectangle {
+                                                width: 8
+                                                height: 8
+                                                radius: 4
+                                                color: Theme.themes[modelData].primary
+                                                anchors.verticalCenter: parent.verticalCenter
+                                            }
+
+                                            Text {
+                                                text: Theme.themes[modelData].name
+                                                color: Theme.text
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                                anchors.verticalCenter: parent.verticalCenter
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                monitorRoot.themeMenuOpen = false;
+                                                Theme.currentTheme = modelData;
+                                                var wallpaperPath = Theme.themes[modelData].wallpaper;
+                                                
+                                                wallpaperExec.targetPath = wallpaperPath;
+                                                wallpaperExec.running = false;
+                                                wallpaperExec.running = true;
+
+                                                saveWallpaperConfigExec.targetPath = wallpaperPath;
+                                                saveWallpaperConfigExec.running = false;
+                                                saveWallpaperConfigExec.running = true;
+
+                                                themeExec.command = [
+                                                    "sh", "-c",
+                                                    "mkdir -p ~/.config/quickshell && " +
+                                                    "echo -n " + JSON.stringify(modelData) + " > ~/.config/quickshell/current_theme.txt && " +
+                                                    "rm -f ~/.config/quickshell/current_wallpaper.txt && " +
+                                                    "gsettings set org.gnome.desktop.interface gtk-theme " + JSON.stringify(modelData) + " && " +
+                                                    "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' && " +
+                                                    "[ -f ~/.config/kitty/themes/" + modelData + ".conf ] && cp ~/.config/kitty/themes/" + modelData + ".conf ~/.config/kitty/current-theme.conf && pkill -SIGUSR1 kitty || true"
+                                                ];
+                                                themeExec.running = false;
+                                                themeExec.running = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                spacing: 8
+
+                                Text {
+                                    text: "Cambiar Fondo"
+                                    color: Theme.text
+                                    font.family: "JetBrainsMono Nerd Font"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    Layout.alignment: Qt.AlignHCenter
+                                }
+
+                                GridView {
+                                    id: wallGrid
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    model: monitorRoot.wallpapersList
+                                    cellWidth: Math.floor(width / 2)
+                                    cellHeight: Math.round((cellWidth - 12) * 9 / 16) + 12
+                                    clip: true
+
+                                    delegate: Item {
+                                        required property var modelData
+                                        width: GridView.view.cellWidth
+                                        height: GridView.view.cellHeight
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            anchors.margins: 4
+                                            radius: 6
+                                            color: Theme.surface
+                                            border.color: Theme.border
+                                            border.width: 1
+                                            clip: true
+
+                                            Image {
+                                                anchors.fill: parent
+                                                anchors.margins: 2
+                                                source: "file://" + modelData
+                                                fillMode: Image.PreserveAspectCrop
+                                                opacity: 1.0
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    monitorRoot.themeMenuOpen = false;
+                                                    
+                                                    wallpaperExec.targetPath = modelData;
+                                                    wallpaperExec.running = false;
+                                                    wallpaperExec.running = true;
+
+                                                    saveWallpaperConfigExec.targetPath = modelData;
+                                                    saveWallpaperConfigExec.running = false;
+                                                    saveWallpaperConfigExec.running = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1332,7 +1301,7 @@ ShellRoot {
                                         spacing: 8
 
                                         Text {
-                                            text: root.audioMuted ? "󰝟" : (root.audioVolumeInt === 0 ? "󰕿" : (root.audioVolumeInt < 50 ? "0" : "󰕾"))
+                                            text: root.audioMuted ? "󰝟" : (root.audioVolumeInt === 0 ? "󰕿" : (root.audioVolumeInt < 50 ? "󰕿" : "󰕾"))
                                             color: root.audioMuted ? Theme.danger : Theme.primary
                                             font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 16
@@ -1791,15 +1760,26 @@ ShellRoot {
                         }
                     }
 
-                    // --- PROCESO DE GPU CONFIGURADO EXCLUSIVAMENTE PARA CARD1 ---
                     property string gpuUsage: "0%"
                     Process {
                         id: gpuProc
-                        command: ["sh", "-c", "if which nvidia-smi >/dev/null 2>&1; then nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits | head -n1 | awk '{print $1\"%\"}'; elif [ -f /sys/class/drm/card1/device/gpu_busy_percent ]; then awk '{print $1\"%\"}' /sys/class/drm/card1/device/gpu_busy_percent; else echo '0%'; fi"]
+                        command: ["sh", "-c", "if which nvidia-smi >/dev/null 2>&1; then nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits | head -n1 | awk '{print $1\"%\"}'; elif [ -f /sys/class/drm/card1/device/gpu_busy_percent ]; then cat /sys/class/drm/card1/device/gpu_busy_percent | awk '{print $1\"%\"}'; else echo '0%'; fi"]
                         stdout: SplitParser {
                             onRead: line => {
                                 var val = line.trim();
                                 if (val.length > 0) bar.gpuUsage = val.includes("%") ? val : val + "%";
+                            }
+                        }
+                    }
+
+                    property string fpsValue: "0"
+                    Process {
+                        id: fpsProc
+                        command: ["sh", "-c", "[ -f /tmp/quickshell_fps.txt ] && cat /tmp/quickshell_fps.txt || echo '0'"]
+                        stdout: SplitParser {
+                            onRead: line => {
+                                var f = line.trim();
+                                if (f.length > 0) bar.fpsValue = f;
                             }
                         }
                     }
@@ -1878,6 +1858,7 @@ ShellRoot {
                             if (!micProc.running) micProc.running = true;
                             if (!cpuProc.running) cpuProc.running = true;
                             if (!gpuProc.running) gpuProc.running = true;
+                            if (!fpsProc.running) fpsProc.running = true;
                             if (!ethProc.running) ethProc.running = true;
                         }
                     }
@@ -1936,8 +1917,8 @@ ShellRoot {
 
                                         text: modelData.id
                                         color: (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id)
-                                               ? Theme.primary
-                                               : Theme.muted
+                                             ? Theme.primary
+                                             : Theme.muted
 
                                         font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 12
@@ -2004,7 +1985,79 @@ ShellRoot {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 4
 
-                            // Red (Auto-agrandable dinámicamente)
+                            Rectangle {
+                                height: 24
+                                Layout.preferredWidth: hwLayout.implicitWidth + 16
+                                color: Theme.surface
+                                border.color: Theme.border
+                                border.width: 1
+                                radius: 6
+                                visible: parseInt(bar.fpsValue) > 0
+
+                                RowLayout {
+                                    id: hwLayout
+                                    anchors.centerIn: parent
+                                    spacing: 12
+
+                                    Row {
+                                        spacing: 4
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        Text {
+                                            text: bar.fpsValue
+                                            color: Theme.text
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                        Text {
+                                            text: "󰓅"
+                                            color: Theme.primary
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 11
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+
+                                    Row {
+                                        spacing: 4
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        Text {
+                                            text: bar.gpuUsage
+                                            color: Theme.text
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                        Text {
+                                            text: "\udb82\udcb6"
+                                            color: Theme.primary
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+
+                                    Row {
+                                        spacing: 4
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        Text {
+                                            text: bar.cpuUsage
+                                            color: Theme.text
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                        Text {
+                                            text: "\uf2db"
+                                            color: Theme.primary
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                }
+                            }
+
                             Rectangle {
                                 id: netRect
                                 height: 24
@@ -2079,8 +2132,8 @@ ShellRoot {
                                     onClicked: {
                                         monitorRoot.audioMenuOpen = false;
                                         monitorRoot.micMenuOpen = false;
-                                        root.sessionMenuOpen = false;
-                                        root.themeMenuOpen = false;
+                                        monitorRoot.themeMenuOpen = false;
+                                        monitorRoot.sessionMenuOpen = false;
                                         monitorRoot.netMenuOpen = !monitorRoot.netMenuOpen;
                                         if (monitorRoot.netMenuOpen) {
                                             root.refreshAllNetworks();
@@ -2089,7 +2142,6 @@ ShellRoot {
                                 }
                             }
 
-                            // 1. Audio Salida
                             Rectangle {
                                 id: audioRect
                                 height: 24
@@ -2139,8 +2191,8 @@ ShellRoot {
                                         } else {
                                             monitorRoot.netMenuOpen = false;
                                             monitorRoot.micMenuOpen = false;
-                                            root.sessionMenuOpen = false;
-                                            root.themeMenuOpen = false;
+                                            monitorRoot.themeMenuOpen = false;
+                                            monitorRoot.sessionMenuOpen = false;
                                             monitorRoot.audioMenuOpen = !monitorRoot.audioMenuOpen;
                                             if (monitorRoot.audioMenuOpen) {
                                                 root.refreshAudio();
@@ -2164,7 +2216,6 @@ ShellRoot {
                                 }
                             }
 
-                            // 2. Audio Entrada (Micrófono)
                             Rectangle {
                                 id: micRect
                                 height: 24
@@ -2214,8 +2265,8 @@ ShellRoot {
                                         } else {
                                             monitorRoot.netMenuOpen = false;
                                             monitorRoot.audioMenuOpen = false;
-                                            root.sessionMenuOpen = false;
-                                            root.themeMenuOpen = false;
+                                            monitorRoot.themeMenuOpen = false;
+                                            monitorRoot.sessionMenuOpen = false;
                                             monitorRoot.micMenuOpen = !monitorRoot.micMenuOpen;
                                             if (monitorRoot.micMenuOpen) {
                                                 root.refreshMic();
@@ -2239,71 +2290,10 @@ ShellRoot {
                                 }
                             }
 
-                            // GPU
-                            Rectangle {
-                                height: 24
-                                Layout.preferredWidth: 50
-                                color: Theme.surface
-                                border.color: Theme.border
-                                border.width: 1
-                                radius: 6
-
-                                Row {
-                                    spacing: 6
-                                    anchors.centerIn: parent
-
-                                    Text {
-                                        text: bar.gpuUsage
-                                        color: Theme.text
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 10
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                    Text {
-                                        text: "\udb82\udcb6"
-                                        color: Theme.primary
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 12
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                }
-                            }
-
-                            // CPU
-                            Rectangle {
-                                height: 24
-                                Layout.preferredWidth: 50
-                                color: Theme.surface
-                                border.color: Theme.border
-                                border.width: 1
-                                radius: 6
-
-                                Row {
-                                    spacing: 6
-                                    anchors.centerIn: parent
-
-                                    Text {
-                                        text: bar.cpuUsage
-                                        color: Theme.text
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 10
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                    Text {
-                                        text: "\uf2db"
-                                        color: Theme.primary
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 12
-                                        anchors.verticalCenter: parent.verticalCenter
-                                    }
-                                }
-                            }
-
-                            // Botón de Selector de Temas
                             Rectangle {
                                 height: 24
                                 width: 28
-                                color: root.themeMenuOpen || themeMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                                color: monitorRoot.themeMenuOpen || themeMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
                                 border.color: themeMouse.containsMouse ? Theme.primary : Theme.border
                                 border.width: 1
                                 radius: 6
@@ -2313,7 +2303,7 @@ ShellRoot {
 
                                 Text {
                                     text: "󰸉"
-                                    color: root.themeMenuOpen ? Theme.primaryHover : Theme.primary
+                                    color: monitorRoot.themeMenuOpen ? Theme.primaryHover : Theme.primary
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
                                     anchors.centerIn: parent
@@ -2328,13 +2318,12 @@ ShellRoot {
                                         monitorRoot.netMenuOpen = false;
                                         monitorRoot.audioMenuOpen = false;
                                         monitorRoot.micMenuOpen = false;
-                                        root.sessionMenuOpen = false;
-                                        root.themeMenuOpen = !root.themeMenuOpen;
+                                        monitorRoot.sessionMenuOpen = false;
+                                        monitorRoot.themeMenuOpen = !monitorRoot.themeMenuOpen;
                                     }
                                 }
                             }
 
-                            // Botón de Opciones (Hyprmod)
                             Rectangle {
                                 height: 24
                                 width: 28
@@ -2366,11 +2355,10 @@ ShellRoot {
                                 }
                             }
 
-                            // Botón de Apagado / Sesión
                             Rectangle {
                                 height: 24
                                 width: 28
-                                color: root.sessionMenuOpen || sessionMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                                color: monitorRoot.sessionMenuOpen || sessionMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
                                 border.color: sessionMouse.containsMouse ? Theme.primary : Theme.border
                                 border.width: 1
                                 radius: 6
@@ -2380,7 +2368,7 @@ ShellRoot {
 
                                 Text {
                                     text: "⏻"
-                                    color: root.sessionMenuOpen ? Theme.primaryHover : Theme.primary
+                                    color: monitorRoot.sessionMenuOpen ? Theme.primaryHover : Theme.primary
                                     font.family: "JetBrainsMono Nerd Font"
                                     font.pixelSize: 12
                                     anchors.centerIn: parent
@@ -2395,8 +2383,8 @@ ShellRoot {
                                         monitorRoot.netMenuOpen = false;
                                         monitorRoot.audioMenuOpen = false;
                                         monitorRoot.micMenuOpen = false;
-                                        root.themeMenuOpen = false;
-                                        root.sessionMenuOpen = !root.sessionMenuOpen;
+                                        monitorRoot.themeMenuOpen = false;
+                                        monitorRoot.sessionMenuOpen = !monitorRoot.sessionMenuOpen;
                                     }
                                 }
                             }
