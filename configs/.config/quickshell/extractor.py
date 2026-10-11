@@ -4,6 +4,41 @@ import os
 from PIL import Image
 import colorsys
 import subprocess
+import re
+
+def hex_to_rgb(hex_code):
+    """Convierte un código hex (#RRGGBB) a una tupla RGB (0-255)."""
+    hex_code = hex_code.lstrip('#')
+    return tuple(int(hex_code[i:i+2], 16) for i in (0, 2, 4))
+
+def rgb_to_hsv(r, g, b):
+    """Convierte valores RGB (0-255) a HSV (H: 0-360, S: 0-255, V: 0-255)."""
+    r, g, b = r/255.0, g/255.0, b/255.0
+    max_c = max(r, g, b)
+    min_c = min(r, g, b)
+    diff = max_c - min_c
+    
+    if diff == 0:
+        h = 0
+    elif max_c == r:
+        h = (60 * ((g - b) / diff) + 360) % 360
+    elif max_c == g:
+        h = (60 * ((b - r) / diff) + 120) % 360
+    else:
+        h = (60 * ((r - g) / diff) + 240) % 360
+        
+    s = 0 if max_c == 0 else diff / max_c
+    v = max_c
+    
+    return h, s * 255, v * 255
+
+def es_blanquecino(hex_code, umbral_saturacion=15, umbral_valor=230):
+    """Determina si el color hex es blanquecino."""
+    r, g, b = hex_to_rgb(hex_code)
+    h, s, v = rgb_to_hsv(r, g, b)
+    if s < umbral_saturacion and v > umbral_valor:
+        return True
+    return False
 
 def get_brightest_vibrant_color(image_path):
     try:
@@ -107,7 +142,7 @@ selection_foreground #161616
         with open(kitty_path, 'w') as f:
             f.write(kitty_theme_content)
 
-        # 3. Guardar colores dinámicos para Rofi (.rasi) incluyendo los valores por defecto
+        # 3. Guardar colores dinámicos para Rofi (.rasi)
         rofi_colors_content = f"""* {{
     accent: {primary_hex};
     bg:        #161616cc;
@@ -125,13 +160,11 @@ selection_foreground #161616
         with open(rofi_colors_path, 'w') as f:
             f.write(rofi_colors_content)
 
-        # 4. Leer la plantilla del tema core y adaptar el color dinámico de GTK
+        # 4. Adaptar GTK CSS
         core_theme_path = os.path.expanduser("~/.local/share/themes/core/gtk-3.0/gtk.css")
-        
         if os.path.exists(core_theme_path):
             with open(core_theme_path, 'r') as f:
                 gtk_css_content = f.read()
-            
             gtk_css_content = gtk_css_content.replace("#cba6f7", primary_hex)
             gtk_css_content = gtk_css_content.replace("#CBA6F7", primary_hex)
         else:
@@ -143,7 +176,58 @@ selection_foreground #161616
         with open(gtk_path, 'w') as f:
             f.write(gtk_css_content)
 
-        # 5. Recargar Kitty en caliente
+        # 5. Adaptar ~/.p10k.zsh (Ruta y OS Icon)
+        p10k_path = os.path.expanduser("~/.p10k.zsh")
+        if os.path.exists(p10k_path):
+            with open(p10k_path, 'r') as f:
+                p10k_content = f.read()
+
+            if es_blanquecino(primary_hex):
+                fg_color = "0"       # Texto ruta a negro
+                short_color = "0"    # Directorios acortados a negro
+                anchor_color = "0"   # Anclas a negro
+                os_fg = "7"          # Icono de Arch en blanco
+                os_bg = "0"          # Fondo del icono de Arch a negro
+            else:
+                fg_color = "254"     # Valor original
+                short_color = "250"  # Valor original
+                anchor_color = "255" # Valor original
+                os_fg = "232"        # Valor original del icono
+                os_bg = "7"          # Valor original del fondo del icono
+
+            # Reemplazar variables de la ruta
+            p10k_content = re.sub(
+                r'(typeset\s+-g\s+POWERLEVEL9K_DIR_FOREGROUND=)\S+',
+                rf'\g<1>{fg_color}',
+                p10k_content
+            )
+            p10k_content = re.sub(
+                r'(typeset\s+-g\s+POWERLEVEL9K_DIR_SHORTENED_FOREGROUND=)\S+',
+                rf'\g<1>{short_color}',
+                p10k_content
+            )
+            p10k_content = re.sub(
+                r'(typeset\s+-g\s+POWERLEVEL9K_DIR_ANCHOR_FOREGROUND=)\S+',
+                rf'\g<1>{anchor_color}',
+                p10k_content
+            )
+
+            # Reemplazar variables del icono de Arch Linux (os_icon)
+            p10k_content = re.sub(
+                r'(typeset\s+-g\s+POWERLEVEL9K_OS_ICON_FOREGROUND=)\S+',
+                rf'\g<1>{os_fg}',
+                p10k_content
+            )
+            p10k_content = re.sub(
+                r'(typeset\s+-g\s+POWERLEVEL9K_OS_ICON_BACKGROUND=)\S+',
+                rf'\g<1>{os_bg}',
+                p10k_content
+            )
+
+            with open(p10k_path, 'w') as f:
+                f.write(p10k_content)
+
+        # 6. Recargar Kitty en caliente
         subprocess.run(["pkill", "-SIGUSR1", "kitty"], capture_output=True)
 
     except Exception as e:
