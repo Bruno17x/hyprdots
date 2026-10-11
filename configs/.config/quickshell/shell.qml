@@ -28,20 +28,6 @@ ShellRoot {
     property var audioSourcesList: []
 
     Process {
-        id: loadSavedThemeProc
-        running: true
-        command: ["sh", "-c", "[ -f ~/.config/quickshell/current_theme.txt ] && cat ~/.config/quickshell/current_theme.txt | tr -d '\\n' || echo 'purple'"]
-        stdout: SplitParser {
-            onRead: line => {
-                var t = line.trim();
-                if (Theme.themes[t]) {
-                    Theme.currentTheme = t;
-                }
-            }
-        }
-    }
-
-    Process {
         id: initWallpaperProc
         running: true
         command: [
@@ -49,8 +35,7 @@ ShellRoot {
             "if [ -f ~/.config/quickshell/current_wallpaper.txt ]; then " +
             "  bg=$(cat ~/.config/quickshell/current_wallpaper.txt | tr -d '\\n'); " +
             "else " +
-            "  [ -f ~/.config/quickshell/current_theme.txt ] && theme=$(cat ~/.config/quickshell/current_theme.txt | tr -d '\\n') || theme='purple'; " +
-            "  bg=\"$HOME/wallpapers/$theme.jpeg\"; " +
+            "  bg=\"$HOME/wallpapers/default.jpeg\"; " +
             "fi; " +
             "pkill swaybg 2>/dev/null || true; " +
             "swaybg -o '*' -i \"$bg\" -m fill &"
@@ -226,7 +211,7 @@ ShellRoot {
     Process {
         id: execCmdProc
         property string targetCmd: ""
-        command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " " + targetCmd]
+        command: ["sh", "-c", targetCmd]
         onExited: root.refreshAllNetworks()
     }
 
@@ -237,9 +222,9 @@ ShellRoot {
             "sh", "-c",
             "uuid=$(nmcli -f NAME,UUID connection show | grep -F '" + targetName + "' | awk '{print $NF}' | head -n1); " +
             "if [ -n \"$uuid\" ]; then " +
-            "  GTK_THEME=" + Theme.currentTheme + " nm-connection-editor --edit \"$uuid\" & " +
+            "  nm-connection-editor --edit \"$uuid\" & " +
             "else " +
-            "  GTK_THEME=" + Theme.currentTheme + " nm-connection-editor & " +
+            "  nm-connection-editor & " +
             "fi"
         ]
     }
@@ -258,7 +243,7 @@ ShellRoot {
 
     Process {
         id: addConnProc
-        command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " nm-connection-editor --create"]
+        command: ["sh", "-c", "nm-connection-editor --create"]
     }
 
     Process {
@@ -282,10 +267,6 @@ ShellRoot {
     }
 
     Process {
-        id: themeExec
-    }
-
-    Process {
         id: wallpaperExec
         property string targetPath: ""
         command: ["swaybg", "-o", "*", "-i", targetPath, "-m", "fill"]
@@ -295,6 +276,15 @@ ShellRoot {
         id: saveWallpaperConfigExec
         property string targetPath: ""
         command: ["sh", "-c", "mkdir -p ~/.config/quickshell && printf '%s' " + JSON.stringify(targetPath) + " > ~/.config/quickshell/current_wallpaper.txt"]
+    }
+
+    Process {
+        id: extractorExec
+        property string targetPath: ""
+        command: ["python3", Quickshell.env("HOME") + "/.config/quickshell/extractor.py", targetPath]
+        onExited: {
+            Theme.reloadColors();
+        }
     }
 
     // --- DIÁLOGOS MODALES Y MENÚS POR MONITOR ---
@@ -361,11 +351,10 @@ ShellRoot {
                     }
                 }
 
-                // --- MENÚ DESPLEGABLE: SESIÓN / APAGADO (TRADUCIDO) ---
+                // --- MENÚ DESPLEGABLE: SESIÓN / APAGADO ---
                 PanelWindow {
                     id: sessionDropdown
                     screen: monitorRoot.modelData
-
                     anchors {
                         top: true
                         right: true
@@ -522,11 +511,10 @@ ShellRoot {
                     }
                 }
 
-                // --- MENÚ DESPLEGABLE DE CALENDARIO CENTRADO Y SUPERPUESTO (OVERLAY) ---
+                // --- MENÚ DE CALENDARIO ---
                 PanelWindow {
                     id: calendarDropdown
                     screen: monitorRoot.modelData
-
                     anchors {
                         top: true
                         left: true
@@ -541,7 +529,6 @@ ShellRoot {
 
                     Item {
                         anchors.fill: parent
-
                         MouseArea {
                             anchors.fill: parent
                             onClicked: monitorRoot.calendarMenuOpen = false
@@ -563,9 +550,6 @@ ShellRoot {
                                 anchors.fill: parent
                                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                                 onClicked: mouse => mouse.accepted = true
-                                onPressed: mouse => mouse.accepted = true
-                                onReleased: mouse => mouse.accepted = true
-                                onWheel: wheel => wheel.accepted = true
                             }
 
                             transform: Translate {
@@ -590,22 +574,14 @@ ShellRoot {
                                 firstDay = (firstDay + 6) % 7; 
                                 var totalDays = new Date(year, month + 1, 0).getDate();
                                 var daysArray = [];
-
-                                for (var i = 0; i < firstDay; i++) {
-                                    daysArray.push({ day: "", isCurrent: false });
-                                }
-                                for (var d = 1; d <= totalDays; d++) {
-                                    daysArray.push({ day: d, isCurrent: true });
-                                }
+                                for (var i = 0; i < firstDay; i++) daysArray.push({ day: "", isCurrent: false });
+                                for (var d = 1; d <= totalDays; d++) daysArray.push({ day: d, isCurrent: true });
                                 return daysArray;
                             }
 
                             function isToday(dayNum) {
                                 var today = new Date();
-                                return dayNum !== "" &&
-                                       dayNum === today.getDate() &&
-                                       displayMonth === today.getMonth() &&
-                                       displayYear === today.getFullYear();
+                                return dayNum !== "" && dayNum === today.getDate() && displayMonth === today.getMonth() && displayYear === today.getFullYear();
                             }
 
                             Item {
@@ -621,13 +597,9 @@ ShellRoot {
 
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Layout.leftMargin: 4
-                                        Layout.rightMargin: 4
-
                                         Text {
                                             text: "←"
                                             color: Theme.primary
-                                            font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 14
                                             MouseArea {
                                                 anchors.fill: parent
@@ -642,23 +614,17 @@ ShellRoot {
                                                 }
                                             }
                                         }
-
                                         Item { Layout.fillWidth: true }
-
                                         Text {
                                             text: calendarMenuContainer.getMonthName(calendarMenuContainer.displayMonth) + " " + calendarMenuContainer.displayYear
                                             color: Theme.text
-                                            font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 14
                                             font.bold: true
                                         }
-
                                         Item { Layout.fillWidth: true }
-
                                         Text {
                                             text: "→"
                                             color: Theme.primary
-                                            font.family: "JetBrainsMono Nerd Font"
                                             font.pixelSize: 14
                                             MouseArea {
                                                 anchors.fill: parent
@@ -674,61 +640,13 @@ ShellRoot {
                                             }
                                         }
                                     }
-
-                                    GridLayout {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        columns: 7
-                                        rowSpacing: 4
-                                        columnSpacing: 4
-
-                                        Repeater {
-                                            model: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
-                                            delegate: Item {
-                                                width: 38
-                                                height: 24
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: modelData
-                                                    color: Theme.primary
-                                                    font.family: "JetBrainsMono Nerd Font"
-                                                    font.pixelSize: 11
-                                                    font.bold: true
-                                                }
-                                            }
-                                        }
-
-                                        Repeater {
-                                            model: calendarMenuContainer.getCalendarDays(calendarMenuContainer.displayYear, calendarMenuContainer.displayMonth)
-                                            delegate: Item {
-                                                width: 38
-                                                height: 32
-
-                                                Rectangle {
-                                                    anchors.centerIn: parent
-                                                    width: 32
-                                                    height: 26
-                                                    radius: 6
-                                                    color: calendarMenuContainer.isToday(modelData.day) ? Theme.primary : Theme.surface
-
-                                                    Text {
-                                                        anchors.centerIn: parent
-                                                        text: modelData.day
-                                                        color: calendarMenuContainer.isToday(modelData.day) ? "#11111b" : Theme.text
-                                                        font.family: "JetBrainsMono Nerd Font"
-                                                        font.pixelSize: 11
-                                                        font.bold: modelData.day !== ""
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // --- MENÚ DE PERSONALIZACIÓN ---
+                // --- MENÚ DE WALLPAPERS (3 COLUMNAS, 540x480) ---
                 PanelWindow {
                     id: themeDropdown
                     screen: monitorRoot.modelData
@@ -736,8 +654,8 @@ ShellRoot {
                         top: true
                         right: true
                     }
-                    width: 700
-                    height: 380
+                    width: 540
+                    height: 480
                     visible: monitorRoot.themeMenuOpen
                     color: "transparent"
 
@@ -748,7 +666,7 @@ ShellRoot {
                         id: themeMenuContainer
                         anchors.fill: parent
                         color: Theme.bg
-                        border.width: 0  // <-- Modificado aquí para quitar el borde
+                        border.width: 0
                         bottomLeftRadius: 10
                         clip: true
 
@@ -760,61 +678,48 @@ ShellRoot {
                         opacity: monitorRoot.themeMenuOpen ? 1.0 : 0.0
                         Behavior on opacity { NumberAnimation { duration: 130 } }
 
-                        RowLayout {
+                        ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 16
-                            spacing: 16
+                            spacing: 12
 
-                            ColumnLayout {
-                                Layout.preferredWidth: 17
+                            Text {
+                                text: "Select Wallpaper"
+                                color: Theme.text
+                                font.family: "JetBrainsMono Nerd Font"
+                                font.pixelSize: 14
+                                font.bold: true
+                                Layout.alignment: Qt.AlignHCenter
+                            }
+
+                            GridView {
+                                id: wallGrid
+                                Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                spacing: 8
+                                model: monitorRoot.wallpapersList
+                                cellWidth: Math.floor(width / 3)
+                                cellHeight: Math.round((cellWidth - 12) * 9 / 16) + 12
+                                clip: true
 
-                                Text {
-                                    text: "Theme"
-                                    color: Theme.text
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    Layout.alignment: Qt.AlignHCenter
-                                }
+                                delegate: Item {
+                                    required property var modelData
+                                    width: GridView.view.cellWidth
+                                    height: GridView.view.cellHeight
 
-                                ListView {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    model: ["purple", "red", "blue", "white"]
-                                    spacing: 6
-                                    clip: true
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: 4
+                                        radius: 6
+                                        color: Theme.surface
+                                        border.color: Theme.border
+                                        border.width: 1
+                                        clip: true
 
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        width: 130
-                                        height: 36
-                                        radius: 5
-                                        color: Theme.currentTheme === modelData ? Theme.surfaceAlt : Theme.surface
-                                        border.color: Theme.currentTheme === modelData ? Theme.primary : Theme.border
-                                        border.width: Theme.currentTheme === modelData ? 2 : 1
-
-                                        Row {
-                                            anchors.centerIn: parent
-                                            spacing: 6
-
-                                            Rectangle {
-                                                width: 8
-                                                height: 8
-                                                radius: 4
-                                                color: Theme.themes[modelData].primary
-                                                anchors.verticalCenter: parent.verticalCenter
-                                            }
-
-                                            Text {
-                                                text: Theme.themes[modelData].name
-                                                color: Theme.text
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 10
-                                                font.bold: true
-                                                anchors.verticalCenter: parent.verticalCenter
-                                            }
+                                        Image {
+                                            anchors.fill: parent
+                                            anchors.margins: 2
+                                            source: "file://" + modelData
+                                            fillMode: Image.PreserveAspectCrop
                                         }
 
                                         MouseArea {
@@ -822,92 +727,20 @@ ShellRoot {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                Theme.currentTheme = modelData;
-                                                var wallpaperPath = Theme.themes[modelData].wallpaper;
-                                                
-                                                wallpaperExec.targetPath = wallpaperPath;
+                                                // 1. Cambiar wallpaper con swaybg
+                                                wallpaperExec.targetPath = modelData;
                                                 wallpaperExec.running = false;
                                                 wallpaperExec.running = true;
 
-                                                saveWallpaperConfigExec.targetPath = wallpaperPath;
+                                                // 2. Guardar preferencia
+                                                saveWallpaperConfigExec.targetPath = modelData;
                                                 saveWallpaperConfigExec.running = false;
                                                 saveWallpaperConfigExec.running = true;
 
-                                                themeExec.command = [
-                                                    "sh", "-c",
-                                                    "mkdir -p ~/.config/quickshell && " +
-                                                    "echo -n " + JSON.stringify(modelData) + " > ~/.config/quickshell/current_theme.txt && " +
-                                                    "rm -f ~/.config/quickshell/current_wallpaper.txt && " +
-                                                    "gsettings set org.gnome.desktop.interface gtk-theme " + JSON.stringify(modelData) + " && " +
-                                                    "gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' && " +
-                                                    "[ -f ~/.config/kitty/themes/" + modelData + ".conf ] && cp ~/.config/kitty/themes/" + modelData + ".conf ~/.config/kitty/current-theme.conf && pkill -SIGUSR1 kitty || true"
-                                                ];
-                                                themeExec.running = false;
-                                                themeExec.running = true;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                spacing: 8
-
-                                Text {
-                                    text: "Wallpaper"
-                                    color: Theme.text
-                                    font.family: "JetBrainsMono Nerd Font"
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    Layout.alignment: Qt.AlignHCenter
-                                }
-
-                                GridView {
-                                    id: wallGrid
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    model: monitorRoot.wallpapersList
-                                    cellWidth: Math.floor(width / 2)
-                                    cellHeight: Math.round((cellWidth - 12) * 9 / 16) + 12
-                                    clip: true
-
-                                    delegate: Item {
-                                        required property var modelData
-                                        width: GridView.view.cellWidth
-                                        height: GridView.view.cellHeight
-
-                                        Rectangle {
-                                            anchors.fill: parent
-                                            anchors.margins: 4
-                                            radius: 6
-                                            color: Theme.surface
-                                            border.color: Theme.border
-                                            border.width: 1
-                                            clip: true
-
-                                            Image {
-                                                anchors.fill: parent
-                                                anchors.margins: 2
-                                                source: "file://" + modelData
-                                                fillMode: Image.PreserveAspectCrop
-                                                opacity: 1.0
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    wallpaperExec.targetPath = modelData;
-                                                    wallpaperExec.running = false;
-                                                    wallpaperExec.running = true;
-
-                                                    saveWallpaperConfigExec.targetPath = modelData;
-                                                    saveWallpaperConfigExec.running = false;
-                                                    saveWallpaperConfigExec.running = true;
-                                                }
+                                                // 3. Ejecutar script Python para actualizar colores al instante
+                                                extractorExec.targetPath = modelData;
+                                                extractorExec.running = false;
+                                                extractorExec.running = true;
                                             }
                                         }
                                     }
@@ -2069,11 +1902,6 @@ ShellRoot {
                     Process {
                         id: appMenuProc
                         command: ["sh", "-c", "pkill rofi || rofi -show drun"]
-                    }
-
-                    Process {
-                        id: audioProc
-                        command: ["sh", "-c", "GTK_THEME=" + Theme.currentTheme + " pavucontrol"]
                     }
 
                     Item {
