@@ -28,13 +28,10 @@ def get_brightest_vibrant_color(image_path):
             _, best_rgb = candidates[0]
             r_adj, g_adj, b_adj = best_rgb
         else:
-            r_adj, g_adj, b_adj = (1.0, 0.2, 0.2)
+            r_adj, g_adj, b_adj = (0.7, 0.7, 0.75)
 
         h, l, s = colorsys.rgb_to_hls(r_adj, g_adj, b_adj)
         
-        if h < 0.08 or h > 0.92:
-            h = 0.0
-            
         final_l = max(l, 0.75)
         final_s = max(s, 0.85)
         
@@ -48,7 +45,7 @@ def get_brightest_vibrant_color(image_path):
         
     except Exception as e:
         print("Error analizando brillo:", e)
-        return "#ff5555"
+        return "#cba6f7"
 
 def generate_colors(image_path):
     try:
@@ -72,6 +69,7 @@ def generate_colors(image_path):
         }
         
         quickshell_path = os.path.expanduser("~/.config/quickshell/colors.json")
+        os.makedirs(os.path.dirname(quickshell_path), exist_ok=True)
         with open(quickshell_path, 'w') as f:
             json.dump(colors_data, f, indent=4)
 
@@ -105,17 +103,35 @@ selection_foreground #161616
 """
 
         kitty_path = os.path.expanduser("~/.config/kitty/current-theme.conf")
+        os.makedirs(os.path.dirname(kitty_path), exist_ok=True)
         with open(kitty_path, 'w') as f:
             f.write(kitty_theme_content)
 
-        # 3. Leer la plantilla del tema core y adaptar el color dinámico limpiamente
+        # 3. Guardar colores dinámicos para Rofi (.rasi) incluyendo los valores por defecto
+        rofi_colors_content = f"""* {{
+    accent: {primary_hex};
+    bg:        #161616cc;
+    bg-alt:    #242424;
+    fg:        #cdd6f4;
+    muted:     #6c7086;
+    subtle:    #45475a;
+
+    background-color: transparent;
+    text-color:       @fg;
+}}
+"""
+        rofi_colors_path = os.path.expanduser("~/.config/rofi/colors.rasi")
+        os.makedirs(os.path.dirname(rofi_colors_path), exist_ok=True)
+        with open(rofi_colors_path, 'w') as f:
+            f.write(rofi_colors_content)
+
+        # 4. Leer la plantilla del tema core y adaptar el color dinámico de GTK
         core_theme_path = os.path.expanduser("~/.local/share/themes/core/gtk-3.0/gtk.css")
         
         if os.path.exists(core_theme_path):
             with open(core_theme_path, 'r') as f:
                 gtk_css_content = f.read()
             
-            # Reemplazar códigos de color del tema base por el nuevo color extraído
             gtk_css_content = gtk_css_content.replace("#cba6f7", primary_hex)
             gtk_css_content = gtk_css_content.replace("#CBA6F7", primary_hex)
         else:
@@ -127,7 +143,7 @@ selection_foreground #161616
         with open(gtk_path, 'w') as f:
             f.write(gtk_css_content)
 
-        # 4. Recargar Kitty en caliente
+        # 5. Recargar Kitty en caliente
         subprocess.run(["pkill", "-SIGUSR1", "kitty"], capture_output=True)
 
     except Exception as e:
