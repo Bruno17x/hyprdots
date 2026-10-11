@@ -6,91 +6,45 @@ import Quickshell.Io
 QtObject {
     id: theme
 
-    property string currentTheme: "purple"
+    property string currentTheme: "dynamic"
 
-    property var themes: {
-        "purple": {
-            name: "Morado",
-            bg: "#d9161616",
-            surface: "#59242424",
-            surfaceAlt: "#40313244",
-            border: "#313244",
-            primary: "#cba6f7",
-            primaryHover: "#b4befe",
-            text: "#cdd6f4",
-            subtext: "#a6adc8",
-            muted: "#6c7086",
-            danger: "#f38ba8",
-            wallpaper: Quickshell.env("HOME") + "/wallpapers/purple.jpeg"
-        },
-        "red": {
-            name: "Rojo",
-            bg: "#d9161616",
-            surface: "#59312424",
-            surfaceAlt: "#40443131",
-            border: "#443131",
-            primary: "#f38ba8",
-            primaryHover: "#eba0ac",
-            text: "#cdd6f4",
-            subtext: "#a6adc8",
-            muted: "#6c7086",
-            danger: "#f38ba8",
-            wallpaper: Quickshell.env("HOME") + "/wallpapers/red.jpeg"
-        },
-        "blue": {
-            name: "Azul",
-            bg: "#d9161616",
-            surface: "#59242a34",
-            surfaceAlt: "#40313a44",
-            border: "#313a44",
-            primary: "#89b4fa",
-            primaryHover: "#b4befe",
-            text: "#cdd6f4",
-            subtext: "#a6adc8",
-            muted: "#6c7086",
-            danger: "#f38ba8",
-            wallpaper: Quickshell.env("HOME") + "/wallpapers/blue.jpeg"
-        },
-        "white": {
-            name: "Blanco",
-            bg: "#d9161616",
-            surface: "#59454545",
-            surfaceAlt: "#40585858",
-            border: "#585858",
-            primary: "#d0d0d0",
-            primaryHover: "#ffffff",
-            text: "#cdd6f4",
-            subtext: "#a6adc8",
-            muted: "#6c7086",
-            danger: "#f38ba8",
-            wallpaper: Quickshell.env("HOME") + "/wallpapers/white.jpeg"
+    // Usamos FileView con una señal de recarga o forzando el reload
+    property FileView colorFile: FileView {
+        path: Quickshell.env("HOME") + "/.config/quickshell/colors.json"
+        watchChanges: true
+    }
+
+    // Cada vez que el proceso de extracción termine o queramos refrescar, forzamos la lectura
+    function reloadColors() {
+        colorFile.reload();
+    }
+
+    property var parsedColors: {
+        try {
+            // Añadimos colorFile.text aquí para que QML sepa que depende de él
+            var rawText = colorFile.text();
+            if (rawText !== "") {
+                var json = JSON.parse(rawText);
+                if (json.colors && json.colors.dark) {
+                    return json.colors.dark;
+                }
+            }
+        } catch(e) {
+            console.log("Error parseando colors.json: " + e);
         }
+        return null;
     }
 
-    readonly property color bg: themes[currentTheme] ? themes[currentTheme].bg : "#d9161616"
-    readonly property color surface: themes[currentTheme] ? themes[currentTheme].surface : "#59242424"
-    readonly property color surfaceAlt: themes[currentTheme] ? themes[currentTheme].surfaceAlt : "#40313244"
-    readonly property color border: themes[currentTheme] ? themes[currentTheme].border : "#313244"
-    readonly property color primary: themes[currentTheme] ? themes[currentTheme].primary : "#cba6f7"
-    readonly property color primaryHover: themes[currentTheme] ? themes[currentTheme].primaryHover : "#b4befe"
-    readonly property color text: themes[currentTheme] ? themes[currentTheme].text : "#cdd6f4"
-    readonly property color subtext: themes[currentTheme] ? themes[currentTheme].subtext : "#a6adc8"
-    readonly property color muted: themes[currentTheme] ? themes[currentTheme].muted : "#6c7086"
-    readonly property color danger: themes[currentTheme] ? themes[currentTheme].danger : "#f38ba8"
-    readonly property string wallpaper: themes[currentTheme] ? themes[currentTheme].wallpaper : ""
-
-    property Process syncProcess: Process {
-        id: syncRunner
-    }
-
-    onCurrentThemeChanged: {
-        let activeColor = themes[currentTheme] ? themes[currentTheme].primary : "#cba6f7";
-        let themeName = currentTheme; 
-        let homeDir = Quickshell.env("HOME");
-
-        syncRunner.command = ["sh", "-c", "sed -i 's/^gtk-theme-name[[:space:]]*=.*/gtk-theme-name = " + themeName + "/' " + homeDir + "/.config/gtk-3.0/settings.ini && " +
-                                     "sed -i 's/^[[:space:]]*accent:[[:space:]]*#[a-fA-F0-9]*;/    accent:    " + activeColor + ";/' " + homeDir + "/.config/rofi/config.rasi && " +
-                                     "gsettings set org.gnome.desktop.interface gtk-theme '" + themeName + "'"];
-        syncRunner.running = true;
-    }
+    // Colores reactivos
+    readonly property color bg: parsedColors && parsedColors.background ? parsedColors.background : "#d9161616"
+    readonly property color surface: parsedColors && parsedColors.surface ? parsedColors.surface : "#59242424"
+    readonly property color surfaceAlt: parsedColors && parsedColors.surface_bright ? parsedColors.surface_bright : "#40313244"
+    readonly property color border: parsedColors && parsedColors.outline ? parsedColors.outline : "#313244"
+    readonly property color primary: parsedColors && parsedColors.primary ? parsedColors.primary : "#cba6f7"
+    readonly property color primaryHover: parsedColors && parsedColors.primary_container ? parsedColors.primary_container : "#b4befe"
+    readonly property color text: parsedColors && parsedColors.on_background ? parsedColors.on_background : "#cdd6f4"
+    readonly property color subtext: parsedColors && parsedColors.on_surface_variant ? parsedColors.on_surface_variant : "#a6adc8"
+    readonly property color muted: "#6c7086"
+    readonly property color danger: parsedColors && parsedColors.error ? parsedColors.error : "#f38ba8"
+    readonly property string wallpaper: ""
 }
