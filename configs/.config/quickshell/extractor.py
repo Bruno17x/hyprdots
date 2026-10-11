@@ -108,155 +108,18 @@ selection_foreground #161616
         with open(kitty_path, 'w') as f:
             f.write(kitty_theme_content)
 
-        # 3. Generar el tema GTK3 totalmente OPACA (sin transparencias)
-        gtk_css_content = f"""/* Tema dinámico generado por extractor.py (Opaco) */
-
-- {{
-    font-family: "JetBrainsMono Nerd Font";
-    font-size: 10pt;
-    outline: none;
-    -gtk-secondary-caret-color: {primary_hex};
-}}
-
-window, dialog, assistant, .background, messagedialog {{
-    background-color: #161616;
-    color: #cdd6f4;
-}}
-
-scrolledwindow, viewport, box, grid {{
-    background-color: transparent;
-    color: #cdd6f4;
-}}
-
-headerbar, .titlebar {{
-    background-color: #161616;
-    border-bottom: 1px solid #313244;
-    box-shadow: none;
-    color: #cdd6f4;
-    padding: 4px 8px;
-}}
-
-headerbar .title {{
-    color: #cdd6f4;
-    font-weight: bold;
-}}
-
-headerbar button {{
-    background-color: #242424;
-    border: 1px solid #313244;
-    border-radius: 6px;
-    color: #cdd6f4;
-}}
-
-headerbar button:hover {{
-    background-color: #313244;
-    color: {primary_hex};
-    border-color: {primary_hex};
-}}
-
-treeview.view, list, listview {{
-    background-color: #242424;
-    color: #cdd6f4;
-    border: 1px solid #313244;
-    border-radius: 6px;
-}}
-
-treeview.view:hover, list row:hover {{
-    background-color: #313244;
-}}
-
-treeview.view:selected, list row:selected {{
-    background-color: {primary_hex};
-    color: #11111b;
-}}
-
-entry {{
-    background-color: #242424;
-    color: #cdd6f4;
-    border: 1px solid #313244;
-    border-radius: 6px;
-    padding: 6px 10px;
-}}
-
-entry:focus {{
-    border-color: {primary_hex};
-    box-shadow: none;
-}}
-
-combobox button.combo {{
-    background-color: #242424;
-    color: #cdd6f4;
-    border: 1px solid #313244;
-    border-radius: 6px;
-    padding: 4px 8px;
-}}
-
-combobox menu, popover.menu {{
-    background-color: #161616;
-    border: 1px solid #313244;
-    color: #cdd6f4;
-}}
-
-button {{
-    background-color: #242424;
-    color: #cdd6f4;
-    border: 1px solid #313244;
-    border-radius: 6px;
-    padding: 6px 14px;
-}}
-
-button:hover {{
-    background-color: #313244;
-    border-color: {primary_hex};
-    color: {primary_hex};
-}}
-
-button:active, button.suggested-action, button:checked {{
-    background-color: {primary_hex};
-    border-color: {primary_hex};
-    color: #11111b;
-}}
-
-notebook {{
-    background-color: transparent;
-    border: none;
-}}
-
-notebook > stack {{
-    background-color: transparent;
-}}
-
-notebook > header {{
-    background-color: #161616;
-    border-bottom: 1px solid #313244;
-}}
-
-notebook > header tab {{
-    background-color: transparent;
-    color: #6c7086;
-    border: none;
-    padding: 6px 12px;
-}}
-
-notebook > header tab:hover {{
-    color: #cdd6f4;
-}}
-
-notebook > header tab:checked {{
-    color: {primary_hex};
-    border-bottom: 2px solid {primary_hex};
-}}
-
-scrollbar slider {{
-    background-color: #313244;
-    border-radius: 4px;
-    min-width: 4px;
-}}
-
-scrollbar slider:hover {{
-    background-color: #45475a;
-}}
-"""
+        # 3. Leer la plantilla del tema core y adaptar el color dinámico limpiamente
+        core_theme_path = os.path.expanduser("~/.local/share/themes/core/gtk-3.0/gtk.css")
+        
+        if os.path.exists(core_theme_path):
+            with open(core_theme_path, 'r') as f:
+                gtk_css_content = f.read()
+            
+            # Reemplazar códigos de color del tema base por el nuevo color extraído
+            gtk_css_content = gtk_css_content.replace("#cba6f7", primary_hex)
+            gtk_css_content = gtk_css_content.replace("#CBA6F7", primary_hex)
+        else:
+            gtk_css_content = f"/* Tema base core no encontrado */\n* {{ color: {primary_hex}; }}"
 
         gtk_dir = os.path.expanduser("~/.config/gtk-3.0")
         os.makedirs(gtk_dir, exist_ok=True)
