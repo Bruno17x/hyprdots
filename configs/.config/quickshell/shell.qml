@@ -2149,22 +2149,38 @@ ShellRoot {
                                 Repeater {
                                     model: Hyprland.workspaces.values.filter(ws => ws.id > 0)
 
-                                    delegate: Text {
+                                    delegate: Rectangle {
                                         required property var modelData
+                                        id: workspaceNumber
 
-                                        text: modelData.id
-                                        color: (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id)
-                                             ? Theme.primary
-                                             : Theme.muted
+                                        width: workspaceLabel.implicitWidth
+                                        height: 24
+                                        radius: 0
+                                        color: "transparent"
 
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 12
-                                        font.bold: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id
+                                        Text {
+                                            id: workspaceLabel
+                                            anchors.centerIn: parent
+                                            text: workspaceNumber.modelData.id
+                                            color: workspaceMouse.containsMouse
+                                                 ? Theme.primaryHover
+                                                 : ((Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === workspaceNumber.modelData.id)
+                                                    ? Theme.primary
+                                                    : Theme.muted)
+                                            Behavior on color {
+                                                ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+                                            }
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 12
+                                            font.bold: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === workspaceNumber.modelData.id
+                                        }
 
                                         MouseArea {
+                                            id: workspaceMouse
                                             anchors.fill: parent
+                                            hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: Hyprland.dispatch("workspace " + modelData.id)
+                                            onClicked: workspaceNumber.modelData.activate()
                                         }
                                     }
                                 }
@@ -2559,76 +2575,104 @@ ShellRoot {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 8
 
-                            // Barra independiente de aplicaciones en segundo plano,
-                            // colocada a la izquierda de la barra de ajustes.
+                            // Bandeja del sistema: hover ocupa toda la altura de la barra.
                             Rectangle {
                                 id: trayRect
                                 height: 24
                                 visible: SystemTray.items.values.length > 0
-                                Layout.preferredWidth: visible ? trayRow.implicitWidth + 12 : 0
+                                Layout.preferredWidth: visible ? trayRow.implicitWidth : 0
                                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                                color: Theme.surface // Fondo fijo: no cambia al pasar el ratón.
+                                color: Theme.surface
                                 border.width: 0
                                 radius: 6
                                 clip: true
 
-                                // Solo se anima el ancho cuando aparecen/desaparecen aplicaciones.
-                                Behavior on Layout.preferredWidth { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                Row {
+                                    id: trayRow
+                                    spacing: 0
+                                    anchors.fill: parent
 
-                                    Row {
-                                        id: trayRow
-                                        spacing: 6
-                                        anchors.centerIn: parent
+                                    Repeater {
+                                        model: SystemTray.items
 
-                                        Repeater {
-                                            model: SystemTray.items.values
+                                        delegate: Item {
+                                            id: trayEntry
+                                            required property var modelData
+                                            required property int index
+                                            width: 28
+                                            height: 24
 
-                                            delegate: Rectangle {
-                                                required property var modelData
-                                                width: 18
-                                                height: 18
-                                                radius: 4
-                                                color: "transparent" // Sin cambio de fondo al pasar el ratón.
+                                            Rectangle {
+                                                id: trayHoverBg
+                                                anchors.fill: parent
+                                                // Coincide con el redondeado del contenedor y queda recortado
+                                                // por trayRect para que el hover nunca sobresalga de la barra.
+                                                radius: trayRect.radius
+                                                color: trayItemMouse.containsMouse ? Theme.surfaceAlt : "transparent"
+                                                Behavior on color {
+                                                    ColorAnimation { duration: 120; easing.type: Easing.OutCubic }
+                                                }
+                                            }
 
-                                                Image {
-                                                    anchors.centerIn: parent
-                                                    width: 14
-                                                    height: 14
-                                                    source: modelData.icon
-                                                    fillMode: Image.PreserveAspectFit
-                                                    smooth: true
+                                            Image {
+                                                anchors.centerIn: parent
+                                                width: 14
+                                                height: 14
+                                                source: trayEntry.modelData.icon
+                                                fillMode: Image.PreserveAspectFit
+                                                smooth: true
+                                            }
+
+                                            // El título suele identificar mejor la aplicación que el ID SNI.
+                                            // Se usa como patrón de pkill al hacer clic derecho; si no coincide
+                                            // con el nombre/proceso real, la aplicación deberá cerrarse desde su menú.
+                                            Process {
+                                                id: trayKillProcess
+                                                command: ["pkill", "-f", "--", trayEntry.modelData.title || trayEntry.modelData.id || ""]
+                                                running: false
+                                            }
+
+                                            MouseArea {
+                                                id: trayItemMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+
+                                                function openTrayMenu() {
+                                                    if (!trayEntry.modelData.hasMenu)
+                                                        return;
+                                                    var pos = trayEntry.mapToItem(bar.contentItem, 0, trayEntry.height);
+                                                    trayEntry.modelData.display(bar, Math.round(pos.x), Math.round(pos.y));
                                                 }
 
-                                                MouseArea {
-                                                    id: trayItemMouse
-                                                    anchors.fill: parent
-                                                    hoverEnabled: true
-                                                    cursorShape: Qt.PointingHandCursor
-                                                    acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-
-                                                    onClicked: mouse => {
-                                                        if (mouse.button === Qt.LeftButton) {
-                                                            modelData.activate();
-                                                        } else if (mouse.button === Qt.MiddleButton) {
-                                                            modelData.secondaryActivate();
-                                                        } else if (mouse.button === Qt.RightButton) {
-                                                            if (modelData.hasMenu) {
-                                                                var pos = trayItemMouse.mapToItem(bar.contentItem, 0, trayRect.height);
-                                                                modelData.display(bar, pos.x, pos.y);
-                                                            } else {
-                                                                modelData.activate();
-                                                            }
-                                                        }
+                                                onClicked: mouse => {
+                                                    var item = trayEntry.modelData;
+                                                    if (mouse.button === Qt.LeftButton) {
+                                                        // activate() es la acción estándar SNI para activar/mostrar la app.
+                                                        if (item.onlyMenu)
+                                                            openTrayMenu();
+                                                        else
+                                                            item.activate();
+                                                    } else if (mouse.button === Qt.MiddleButton) {
+                                                        item.secondaryActivate();
+                                                    } else if (mouse.button === Qt.RightButton) {
+                                                        var appName = String(item.title || item.id || "").trim();
+                                                        if (appName.length > 0)
+                                                            trayKillProcess.running = true;
+                                                        else
+                                                            openTrayMenu();
                                                     }
+                                                }
 
-                                                    onWheel: wheel => {
-                                                        modelData.scroll(wheel.angleDelta.y, false);
-                                                    }
+                                                onWheel: wheel => {
+                                                    trayEntry.modelData.scroll(wheel.angleDelta.y, false);
                                                 }
                                             }
                                         }
                                     }
                                 }
+                            }
 
                             // Barra única para todos los iconos de estado y controles.
                             Rectangle {
