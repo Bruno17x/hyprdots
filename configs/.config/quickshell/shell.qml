@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Services.SystemTray
 import QtQuick
 import QtQuick.Layouts
 
@@ -300,6 +301,7 @@ ShellRoot {
                 property bool micMenuOpen: false
                 property bool themeMenuOpen: false
                 property bool sessionMenuOpen: false
+                property bool spotifyMenuOpen: false
                 property bool calendarMenuOpen: false
                 property var wallpapersList: []
                 
@@ -340,7 +342,7 @@ ShellRoot {
                         left: true
                         right: true
                     }
-                    visible: monitorRoot.netMenuOpen || monitorRoot.audioMenuOpen || monitorRoot.micMenuOpen || monitorRoot.themeMenuOpen || monitorRoot.sessionMenuOpen || root.confirmDeleteOpen
+                    visible: monitorRoot.netMenuOpen || monitorRoot.audioMenuOpen || monitorRoot.micMenuOpen || monitorRoot.themeMenuOpen || monitorRoot.sessionMenuOpen || monitorRoot.spotifyMenuOpen || root.confirmDeleteOpen
                     color: "transparent"
 
                     WlrLayershell.layer: WlrLayer.Top
@@ -357,6 +359,7 @@ ShellRoot {
                                 monitorRoot.micMenuOpen = false;
                                 monitorRoot.themeMenuOpen = false;
                                 monitorRoot.sessionMenuOpen = false;
+                                monitorRoot.spotifyMenuOpen = false;
                             }
                         }
                     }
@@ -1895,6 +1898,90 @@ ShellRoot {
                         }
                     }
 
+                    // --- METADATOS DE SPOTIFY ---
+                    property string spotifyTrack: ""
+                    property bool spotifyPlaying: false
+                    property bool spotifyMenuOpen: false
+                    property string spotifyArtUrl: ""
+                    property real spotifyPosition: 0
+                    property real spotifyLength: 0
+                    property string spotifyLoopMode: "None"
+                    property bool spotifyShuffle: false
+
+                    Process {
+                        id: spotifyControlProc
+                        property string targetCmd: ""
+                        command: ["sh", "-c", targetCmd]
+                        onExited: (exitCode, exitStatus) => {
+                            spotifyModesProc.running = false;
+                            spotifyModesProc.running = true;
+                        }
+                    }
+                    Process {
+                        id: spotifyArtProc
+                        command: ["sh", "-c", "playerctl -p spotify metadata mpris:artUrl 2>/dev/null || true"]
+                        stdout: SplitParser { onRead: line => bar.spotifyArtUrl = line.trim() }
+                    }
+                    Process {
+                        id: spotifyModesProc
+                        command: ["sh", "-c", "s=$(playerctl -p spotify shuffle 2>/dev/null || echo Off); l=$(playerctl -p spotify loop 2>/dev/null || echo None); printf '%s|%s\\n' \"$s\" \"$l\""]
+                        stdout: SplitParser {
+                            onRead: line => {
+                                var modes = line.trim().split("|");
+                                if (modes.length >= 2) {
+                                    bar.spotifyShuffle = modes[0].toLowerCase() === "on" || modes[0].toLowerCase() === "true";
+                                    var loop = modes[1].trim().toLowerCase();
+                                    bar.spotifyLoopMode = loop === "track" ? "Track" : (loop === "playlist" ? "Playlist" : "None");
+                                }
+                            }
+                        }
+                    }
+                    Process {
+                        id: spotifyPositionProc
+                        command: ["sh", "-c", "p=$(playerctl -p spotify position 2>/dev/null || echo 0); d=$(playerctl -p spotify metadata mpris:length 2>/dev/null || echo 0); printf \"%s|%s\\n\" \"$p\" \"$((d/1000000))\""]
+                        stdout: SplitParser {
+                            onRead: line => {
+                                var values = line.trim().split("|")
+                                if (values.length >= 2) { bar.spotifyPosition = parseFloat(values[0]) || 0; bar.spotifyLength = parseFloat(values[1]) || 0 }
+                            }
+                        }
+                    }
+
+                    Process {
+                        id: spotifyProc
+                        command: ["sh", "-c", "playerctl -p spotify metadata --format '{{status}}|{{title}} — {{artist}}' 2>/dev/null || true"]
+                        stdout: SplitParser {
+                            onRead: line => {
+                                var value = line.trim();
+                                var splitAt = value.indexOf("|");
+                                if (splitAt >= 0) {
+                                    bar.spotifyPlaying = value.substring(0, splitAt).toLowerCase() === "playing";
+                                    bar.spotifyTrack = value.substring(splitAt + 1).trim();
+                                    spotifyArtProc.running = false;
+                                    spotifyArtProc.running = true;
+                                } else {
+                                    bar.spotifyPlaying = false;
+                                    bar.spotifyTrack = "";
+                                }
+                            }
+                        }
+                    }
+
+                    Timer {
+                        interval: 1500
+                        running: true
+                        repeat: true
+                        triggeredOnStart: true
+                        onTriggered: {
+                            spotifyProc.running = false;
+                            spotifyProc.running = true;
+                            spotifyPositionProc.running = false;
+                            spotifyPositionProc.running = true;
+                            spotifyModesProc.running = false;
+                            spotifyModesProc.running = true;
+                        }
+                    }
+
                     property string downSpeed: "0 KB/s"
                     property string upSpeed: "0 KB/s"
                     property real prevRx: 0
@@ -2053,6 +2140,272 @@ ShellRoot {
                                 font.family: "JetBrainsMono Nerd Font"
                                 font.pixelSize: 12
                             }
+
+                            // --- SPOTIFY: canción actual + visualizador animado ---
+                            Rectangle {
+                                id: spotifyWidget
+                                visible: bar.spotifyTrack.length > 0
+                                height: 24
+                                Layout.preferredWidth: visible ? spotifyRow.implicitWidth + 14 : 0
+                                color: Theme.surface
+                                border.width: 0
+                                radius: 6
+                                clip: true
+
+                                RowLayout {
+                                    id: spotifyRow
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 7
+                                    anchors.rightMargin: 7
+                                    spacing: 6
+
+                                    Text {
+                                        text: "󰓇"
+                                        color: Theme.primary
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 12
+                                    }
+
+                                    Text {
+                                        text: bar.spotifyTrack
+                                        color: Theme.text
+                                        font.family: "JetBrainsMono Nerd Font"
+                                        font.pixelSize: 10
+                                        elide: Text.ElideRight
+                                        Layout.maximumWidth: 220
+                                        Layout.preferredWidth: Math.min(implicitWidth, 220)
+                                    }
+
+                                    Row {
+                                        id: spotifyVisualizer
+                                        spacing: 2
+                                        Layout.alignment: Qt.AlignVCenter
+
+                                        Repeater {
+                                            model: [0, 1, 2, 3, 4]
+
+                                            delegate: Rectangle {
+                                                required property int modelData
+                                                width: 3
+                                                height: 5
+                                                radius: 1.5
+                                                color: Theme.primary
+                                                anchors.verticalCenter: parent.verticalCenter
+
+                                                SequentialAnimation on height {
+                                                    running: bar.spotifyPlaying
+                                                    loops: Animation.Infinite
+                                                    NumberAnimation {
+                                                        to: [9, 6, 11, 7, 10][modelData]
+                                                        duration: 180 + modelData * 65
+                                                        easing.type: Easing.InOutSine
+                                                    }
+                                                    NumberAnimation {
+                                                        to: [4, 8, 5, 10, 4][modelData]
+                                                        duration: 210 + modelData * 45
+                                                        easing.type: Easing.InOutSine
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: monitorRoot.spotifyMenuOpen = !monitorRoot.spotifyMenuOpen
+                                }
+
+                                Behavior on Layout.preferredWidth {
+                                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                                }
+                            }
+                        }
+
+                        // --- MENÚ DE CONTROLES DE SPOTIFY ---
+                        PanelWindow {
+                            id: spotifyDropdown
+                            screen: monitorRoot.modelData
+                            anchors { top: true; left: true }
+                            width: 280
+                            height: 250
+                            visible: monitorRoot.spotifyMenuOpen
+                            color: "transparent"
+                            WlrLayershell.layer: WlrLayer.Overlay
+                            WlrLayershell.namespace: "quickshell-bar"
+                            Rectangle {
+                                anchors.fill: parent
+                                color: Theme.bg
+                                radius: 10
+                                border.width: 0
+                                // Cuadrar las esquinas superiores del menú.
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    height: 10
+                                    color: Theme.bg
+                                }
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 9
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 10
+                                        Image {
+                                            source: bar.spotifyArtUrl
+                                            Layout.preferredWidth: 64
+                                            Layout.preferredHeight: 64
+                                            fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+                                            sourceSize.width: 128
+                                            sourceSize.height: 128
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 4
+                                            Text {
+                                                text: "Spotify"
+                                                color: Theme.primary
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                font.bold: true
+                                            }
+                                            Text {
+                                                text: bar.spotifyTrack || "No hay canción"
+                                                color: Theme.text
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                wrapMode: Text.Wrap
+                                                maximumLineCount: 3
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+                                            Text {
+                                                text: bar.spotifyPlaying ? "Reproduciendo" : "En pausa"
+                                                color: Theme.subtext
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 9
+                                            }
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 3
+                                        Rectangle {
+                                            id: spotifySeekTrack
+                                            Layout.fillWidth: true
+                                            height: 5
+                                            radius: 3
+                                            color: Theme.surfaceAlt
+                                            Rectangle {
+                                                width: bar.spotifyLength > 0 ? Math.max(0, Math.min(parent.width, parent.width * bar.spotifyPosition / bar.spotifyLength)) : 0
+                                                height: parent.height
+                                                radius: 3
+                                                color: Theme.primary
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: mouse => {
+                                                    if (bar.spotifyLength > 0) {
+                                                        var seekTo = Math.max(0, Math.min(bar.spotifyLength, mouse.x / width * bar.spotifyLength))
+                                                        spotifyControlProc.targetCmd = "playerctl -p spotify position " + seekTo.toFixed(2)
+                                                        spotifyControlProc.running = false
+                                                        spotifyControlProc.running = true
+                                                        bar.spotifyPosition = seekTo
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            Text {
+                                                text: Math.floor(bar.spotifyPosition / 60) + ":" + ("0" + Math.floor(bar.spotifyPosition % 60)).slice(-2)
+                                                color: Theme.subtext
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 8
+                                            }
+                                            Item { Layout.fillWidth: true }
+                                            Text {
+                                                text: "-" + Math.floor(Math.max(0, bar.spotifyLength - bar.spotifyPosition) / 60) + ":" + ("0" + Math.floor(Math.max(0, bar.spotifyLength - bar.spotifyPosition) % 60)).slice(-2)
+                                                color: Theme.subtext
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 8
+                                            }
+                                        }
+                                    }
+                                    Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        // Bucle de playlist, anterior, reproducir/pausa, siguiente, repetir.
+                                        Repeater {
+                                            model: [
+                                                { label: "⇄", action: "shuffle" },
+                                                { label: "󰒮", action: "previous" },
+                                                { label: bar.spotifyPlaying ? "󰏤" : "󰐊", action: "play-pause" },
+                                                { label: "󰒭", action: "next" },
+                                                { label: "󰑖", action: "repeat" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredWidth: 1
+                                                height: 34
+                                                radius: 6
+                                                color: spotifyControlMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData.label
+                                                    color: ((modelData.action === "shuffle" && bar.spotifyShuffle) || (modelData.action === "repeat" && bar.spotifyLoopMode !== "None")) ? "#1DB954" : Theme.text
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 15
+                                                }
+                                                Text {
+                                                    visible: modelData.action === "repeat" && bar.spotifyLoopMode === "Track"
+                                                    text: "1"
+                                                    anchors.right: parent.right
+                                                    anchors.top: parent.top
+                                                    anchors.rightMargin: 7
+                                                    anchors.topMargin: 5
+                                                    color: "#1DB954"
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 8
+                                                    font.bold: true
+                                                }
+                                                MouseArea {
+                                                    id: spotifyControlMouse
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: {
+                                                        if (modelData.action === "shuffle") {
+                                                            // Actualización optimista para que la interfaz responda al instante.
+                                                            var enableShuffle = !bar.spotifyShuffle;
+                                                            bar.spotifyShuffle = enableShuffle;
+                                                            spotifyControlProc.targetCmd = "playerctl -p spotify shuffle " + (enableShuffle ? "On" : "Off")
+                                                        } else if (modelData.action === "repeat") {
+                                                            // Orden de Spotify: repetir playlist, repetir canción (1), desactivado.
+                                                            var nextLoop = bar.spotifyLoopMode === "None" ? "Playlist" : (bar.spotifyLoopMode === "Playlist" ? "Track" : "None")
+                                                            bar.spotifyLoopMode = nextLoop;
+                                                            spotifyControlProc.targetCmd = "playerctl -p spotify loop " + nextLoop
+                                                        } else {
+                                                            spotifyControlProc.targetCmd = "playerctl -p spotify " + modelData.action
+                                                        }
+                                                        // No reiniciar un proceso activo: cambiar el comando y lanzar al terminar.
+                                                        spotifyControlProc.running = false
+                                                        spotifyControlProc.running = true
+                                                        // El estado real se verifica al terminar el comando.
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // --- CENTRO ---
@@ -2112,29 +2465,47 @@ ShellRoot {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 4
 
+                            // 1. MÓDULO DE HARDWARE (FPS, GPU, CPU)
                             Rectangle {
+                                id: hwRect
                                 height: 24
-                                Layout.preferredWidth: hwLayout.implicitWidth + 16
-                                color: Theme.surface
-                                border.color: Theme.border
+                                Layout.preferredWidth: hwMouse.containsMouse ? hwLayout.implicitWidth + 16 : hwLayout.implicitWidth + 12
+                                color: hwMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                                border.color: hwMouse.containsMouse ? Theme.primary : Theme.border
                                 border.width: 1
                                 radius: 6
+                                clip: true
                                 visible: parseInt(bar.fpsValue) > 0
+
+                                Behavior on Layout.preferredWidth { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                                Behavior on border.color { ColorAnimation { duration: 150 } }
 
                                 RowLayout {
                                     id: hwLayout
                                     anchors.centerIn: parent
-                                    spacing: 12
+                                    spacing: hwMouse.containsMouse ? 10 : 6
+                                    Behavior on spacing { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
+                                    // FPS
                                     Row {
-                                        spacing: 4
+                                        spacing: 0
                                         anchors.verticalCenter: parent.verticalCenter
-                                        Text {
-                                            text: bar.fpsValue
-                                            color: Theme.text
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 10
+                                        Item {
+                                            width: hwMouse.containsMouse ? fpsTxt.implicitWidth + 4 : 0
+                                            height: fpsTxt.implicitHeight
+                                            clip: true
                                             anchors.verticalCenter: parent.verticalCenter
+                                            Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                            Text {
+                                                id: fpsTxt
+                                                text: bar.fpsValue
+                                                color: Theme.text
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                opacity: hwMouse.containsMouse ? 1.0 : 0.0
+                                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            }
                                         }
                                         Text {
                                             text: "󰓅"
@@ -2145,15 +2516,25 @@ ShellRoot {
                                         }
                                     }
 
+                                    // GPU
                                     Row {
-                                        spacing: 4
+                                        spacing: 0
                                         anchors.verticalCenter: parent.verticalCenter
-                                        Text {
-                                            text: bar.gpuUsage
-                                            color: Theme.text
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 10
+                                        Item {
+                                            width: hwMouse.containsMouse ? gpuTxt.implicitWidth + 4 : 0
+                                            height: gpuTxt.implicitHeight
+                                            clip: true
                                             anchors.verticalCenter: parent.verticalCenter
+                                            Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                            Text {
+                                                id: gpuTxt
+                                                text: bar.gpuUsage
+                                                color: Theme.text
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                opacity: hwMouse.containsMouse ? 1.0 : 0.0
+                                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            }
                                         }
                                         Text {
                                             text: "\udb82\udcb6"
@@ -2164,15 +2545,25 @@ ShellRoot {
                                         }
                                     }
 
+                                    // CPU
                                     Row {
-                                        spacing: 4
+                                        spacing: 0
                                         anchors.verticalCenter: parent.verticalCenter
-                                        Text {
-                                            text: bar.cpuUsage
-                                            color: Theme.text
-                                            font.family: "JetBrainsMono Nerd Font"
-                                            font.pixelSize: 10
+                                        Item {
+                                            width: hwMouse.containsMouse ? cpuTxt.implicitWidth + 4 : 0
+                                            height: cpuTxt.implicitHeight
+                                            clip: true
                                             anchors.verticalCenter: parent.verticalCenter
+                                            Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                            Text {
+                                                id: cpuTxt
+                                                text: bar.cpuUsage
+                                                color: Theme.text
+                                                font.family: "JetBrainsMono Nerd Font"
+                                                font.pixelSize: 10
+                                                opacity: hwMouse.containsMouse ? 1.0 : 0.0
+                                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            }
                                         }
                                         Text {
                                             text: "\uf2db"
@@ -2183,71 +2574,174 @@ ShellRoot {
                                         }
                                     }
                                 }
+
+                                MouseArea {
+                                    id: hwMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                }
+                            }
+                            // 1.5 BANDEJA DE APLICACIONES EN SEGUNDO PLANO (SystemTray)
+                            Rectangle {
+                                id: trayRect
+                                height: 24
+                                visible: SystemTray.items.values.length > 0
+                                Layout.preferredWidth: visible ? trayRow.implicitWidth + 12 : 0
+                                color: Theme.surface
+                                border.color: Theme.border
+                                border.width: 1
+                                radius: 6
+                                clip: true
+
+                                Behavior on Layout.preferredWidth { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
+                                Row {
+                                    id: trayRow
+                                    spacing: 6
+                                    anchors.centerIn: parent
+
+                                    Repeater {
+                                        model: SystemTray.items.values
+
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            width: 18
+                                            height: 18
+                                            radius: 4
+                                            color: trayItemMouse.containsMouse ? Theme.surfaceAlt : "transparent"
+
+                                            Image {
+                                                anchors.centerIn: parent
+                                                width: 14
+                                                height: 14
+                                                source: modelData.icon
+                                                fillMode: Image.PreserveAspectFit
+                                                smooth: true
+                                            }
+
+                                            MouseArea {
+                                                id: trayItemMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+
+                                                onClicked: mouse => {
+                                                    if (mouse.button === Qt.LeftButton) {
+                                                        modelData.activate();
+                                                    } else if (mouse.button === Qt.MiddleButton) {
+                                                        modelData.secondaryActivate();
+                                                    } else if (mouse.button === Qt.RightButton) {
+                                                        if (modelData.hasMenu) {
+                                                            var pos = trayItemMouse.mapToItem(bar.contentItem, 0, trayRect.height);
+                                                            modelData.display(bar, pos.x, pos.y);
+                                                        } else {
+                                                            modelData.activate();
+                                                        }
+                                                    }
+                                                }
+
+                                                onWheel: wheel => {
+                                                    modelData.scroll(wheel.angleDelta.y, false);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
+                            // 2. MÓDULO DE RED (Velocidades + Icono perfectamente centrado)
                             Rectangle {
                                 id: netRect
+                                property bool expanded: netMouse.containsMouse || monitorRoot.netMenuOpen
                                 height: 24
-                                Layout.minimumWidth: 135
-                                Layout.preferredWidth: netContentRow.implicitWidth + 24
-                                color: monitorRoot.netMenuOpen || netMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                                Layout.preferredWidth: expanded ? netContentRow.implicitWidth + 10 : 28
+                                color: expanded ? Theme.surfaceAlt : Theme.surface
                                 border.color: netMouse.containsMouse ? Theme.primary : Theme.border
                                 border.width: 1
                                 radius: 6
+                                clip: true
 
+                                Behavior on Layout.preferredWidth { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                                 Behavior on color { ColorAnimation { duration: 150 } }
                                 Behavior on border.color { ColorAnimation { duration: 150 } }
 
                                 Row {
                                     id: netContentRow
-                                    spacing: 8
+                                    spacing: 0
                                     anchors.centerIn: parent
 
-                                    Row {
-                                        spacing: 8
+                                    Item {
+                                        width: netRect.expanded ? netSpeedsRow.implicitWidth + 6 : 0
+                                        height: 24
+                                        clip: true
                                         anchors.verticalCenter: parent.verticalCenter
+                                        Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
                                         Row {
-                                            spacing: 3
-                                            Text {
-                                                text: "↓"
-                                                color: Theme.primary
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 11
-                                                font.bold: true
-                                            }
-                                            Text {
-                                                text: bar.downSpeed
-                                                color: Theme.text
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 10
-                                            }
-                                        }
+                                            id: netSpeedsRow
+                                            spacing: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 6
+                                            opacity: netRect.expanded ? 1.0 : 0.0
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
 
-                                        Row {
-                                            spacing: 3
-                                            Text {
-                                                text: "↑"
-                                                color: Theme.primary
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 11
-                                                font.bold: true
+                                            Row {
+                                                spacing: 3
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                Text {
+                                                    text: "↓"
+                                                    color: Theme.primary
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                }
+                                                Text {
+                                                    text: bar.downSpeed
+                                                    color: Theme.text
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                }
                                             }
-                                            Text {
-                                                text: bar.upSpeed
-                                                color: Theme.text
-                                                font.family: "JetBrainsMono Nerd Font"
-                                                font.pixelSize: 10
+
+                                            Row {
+                                                spacing: 3
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                Text {
+                                                    text: "↑"
+                                                    color: Theme.primary
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                }
+                                                Text {
+                                                    text: bar.upSpeed
+                                                    color: Theme.text
+                                                    font.family: "JetBrainsMono Nerd Font"
+                                                    font.pixelSize: 10
+                                                }
                                             }
                                         }
                                     }
 
-                                    Text {
-                                        text: root.ethernetConnected ? "\uf0e8" : "\uf1eb"
-                                        color: monitorRoot.netMenuOpen ? Theme.primaryHover : Theme.primary
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 12
+                                    // Contenedor fijo de 28x24 para centrar el icono de forma exacta
+                                    Item {
+                                        width: 28
+                                        height: 24
                                         anchors.verticalCenter: parent.verticalCenter
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            // compensación de -1px horizontal para glifos Nerd Font de doble ancho
+                                            anchors.horizontalCenterOffset: -1.8
+                                            text: root.ethernetConnected ? "󰈀" : "󰤨"
+                                            color: monitorRoot.netMenuOpen ? Theme.primaryHover : Theme.primary
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 13
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
                                     }
                                 }
 
@@ -2269,30 +2763,44 @@ ShellRoot {
                                     }
                                 }
                             }
-
+                            // 3. MÓDULO DE AUDIO (Volumen + Icono)
                             Rectangle {
                                 id: audioRect
+                                property bool expanded: audioMouse.containsMouse || monitorRoot.audioMenuOpen
                                 height: 24
-                                Layout.preferredWidth: 55
-                                color: monitorRoot.audioMenuOpen || audioMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                                Layout.preferredWidth: expanded ? audioRow.implicitWidth + 16 : 28
+                                color: expanded ? Theme.surfaceAlt : Theme.surface
                                 border.color: audioMouse.containsMouse ? Theme.primary : Theme.border
                                 border.width: 1
                                 radius: 6
+                                clip: true
                                 Layout.alignment: Qt.AlignVCenter
 
+                                Behavior on Layout.preferredWidth { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                                 Behavior on color { ColorAnimation { duration: 150 } }
                                 Behavior on border.color { ColorAnimation { duration: 150 } }
 
                                 Row {
-                                    spacing: 6
+                                    id: audioRow
+                                    spacing: 0
                                     anchors.centerIn: parent
 
-                                    Text {
-                                        text: root.audioMuted ? "0%" : root.audioVolumeInt + "%"
-                                        color: Theme.text
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 10
+                                    Item {
+                                        width: audioRect.expanded ? audioVolTxt.implicitWidth + 6 : 0
+                                        height: audioVolTxt.implicitHeight
+                                        clip: true
                                         anchors.verticalCenter: parent.verticalCenter
+                                        Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
+                                        Text {
+                                            id: audioVolTxt
+                                            text: root.audioMuted ? "0%" : root.audioVolumeInt + "%"
+                                            color: Theme.text
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                            opacity: audioRect.expanded ? 1.0 : 0.0
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                        }
                                     }
 
                                     Text {
@@ -2345,29 +2853,44 @@ ShellRoot {
                                 }
                             }
 
+                            // 4. MÓDULO DE MICRÓFONO (Ganancia + Icono)
                             Rectangle {
                                 id: micRect
+                                property bool expanded: micMouse.containsMouse || monitorRoot.micMenuOpen
                                 height: 24
-                                Layout.preferredWidth: 55
-                                color: monitorRoot.micMenuOpen || micMouse.containsMouse ? Theme.surfaceAlt : Theme.surface
+                                Layout.preferredWidth: expanded ? micRow.implicitWidth + 16 : 28
+                                color: expanded ? Theme.surfaceAlt : Theme.surface
                                 border.color: micMouse.containsMouse ? Theme.primary : Theme.border
                                 border.width: 1
                                 radius: 6
+                                clip: true
                                 Layout.alignment: Qt.AlignVCenter
 
+                                Behavior on Layout.preferredWidth { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                                 Behavior on color { ColorAnimation { duration: 150 } }
                                 Behavior on border.color { ColorAnimation { duration: 150 } }
 
                                 Row {
-                                    spacing: 6
+                                    id: micRow
+                                    spacing: 0
                                     anchors.centerIn: parent
 
-                                    Text {
-                                        text: root.micMuted ? "0%" : root.micVolumeInt + "%"
-                                        color: Theme.text
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 10
+                                    Item {
+                                        width: micRect.expanded ? micVolTxt.implicitWidth + 6 : 0
+                                        height: micVolTxt.implicitHeight
+                                        clip: true
                                         anchors.verticalCenter: parent.verticalCenter
+                                        Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+
+                                        Text {
+                                            id: micVolTxt
+                                            text: root.micMuted ? "0%" : root.micVolumeInt + "%"
+                                            color: Theme.text
+                                            font.family: "JetBrainsMono Nerd Font"
+                                            font.pixelSize: 10
+                                            opacity: micRect.expanded ? 1.0 : 0.0
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                        }
                                     }
 
                                     Text {
@@ -2420,6 +2943,7 @@ ShellRoot {
                                 }
                             }
 
+                            // 5. WALLPAPERS
                             Rectangle {
                                 height: 24
                                 width: 28
@@ -2455,6 +2979,7 @@ ShellRoot {
                                 }
                             }
 
+                            // 6. HYPRMOD
                             Rectangle {
                                 height: 24
                                 width: 28
@@ -2486,6 +3011,7 @@ ShellRoot {
                                 }
                             }
 
+                            // 7. SESIÓN
                             Rectangle {
                                 height: 24
                                 width: 28
