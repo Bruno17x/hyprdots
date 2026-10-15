@@ -302,21 +302,32 @@ ShellRoot {
                 property bool sessionMenuOpen: false
                 property bool calendarMenuOpen: false
                 property var wallpapersList: []
+                
+                // Variables para la optimización de fondos
+                property bool hasScannedWallpapers: false
+                property var tempWallpapersList: []
 
                 Process {
                     id: scanWallpapersProc
-                    running: true
+                    running: monitorRoot.themeMenuOpen && !monitorRoot.hasScannedWallpapers
                     command: ["sh", "-c", "find \"$HOME/wallpapers\" -type f \\( -name '*.jpeg' -o -name '*.jpg' -o -name '*.png' \\) 2>/dev/null"]
+                    
+                    onStarted: {
+                        monitorRoot.tempWallpapersList = [];
+                    }
+
                     stdout: SplitParser {
                         onRead: line => {
                             var path = line.trim();
                             if (path.length > 0) {
-                                var current = [];
-                                for (var i = 0; i < monitorRoot.wallpapersList.length; i++) current.push(monitorRoot.wallpapersList[i]);
-                                current.push(path);
-                                monitorRoot.wallpapersList = current;
+                                monitorRoot.tempWallpapersList.push(path);
                             }
                         }
+                    }
+
+                    onExited: {
+                        monitorRoot.wallpapersList = monitorRoot.tempWallpapersList;
+                        monitorRoot.hasScannedWallpapers = true;
                     }
                 }
 
@@ -538,8 +549,8 @@ ShellRoot {
                             id: calendarMenuContainer
                             anchors.top: parent.top
                             anchors.horizontalCenter: parent.horizontalCenter
-                            width: 320
-                            height: 300
+                            width: 360
+                            height: 395
                             color: Theme.bg
                             border.width: 0
                             bottomLeftRadius: 10
@@ -586,21 +597,23 @@ ShellRoot {
 
                             Item {
                                 anchors.fill: parent
-                                anchors.margins: 16
+                                anchors.topMargin: 20
+                                anchors.bottomMargin: 20
+                                anchors.leftMargin: 16
+                                anchors.rightMargin: 16
                                 z: 2
 
                                 ColumnLayout {
-                                    anchors.top: parent.top
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    spacing: 10
+                                    anchors.fill: parent
+                                    spacing: 12
 
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Text {
-                                            text: "←"
+                                            text: "‹"
                                             color: Theme.primary
-                                            font.pixelSize: 14
+                                            font.pixelSize: 20
+                                            font.bold: true
                                             MouseArea {
                                                 anchors.fill: parent
                                                 cursorShape: Qt.PointingHandCursor
@@ -618,14 +631,15 @@ ShellRoot {
                                         Text {
                                             text: calendarMenuContainer.getMonthName(calendarMenuContainer.displayMonth) + " " + calendarMenuContainer.displayYear
                                             color: Theme.text
-                                            font.pixelSize: 14
+                                            font.pixelSize: 15
                                             font.bold: true
                                         }
                                         Item { Layout.fillWidth: true }
                                         Text {
-                                            text: "→"
+                                            text: "›"
                                             color: Theme.primary
-                                            font.pixelSize: 14
+                                            font.pixelSize: 20
+                                            font.bold: true
                                             MouseArea {
                                                 anchors.fill: parent
                                                 cursorShape: Qt.PointingHandCursor
@@ -636,6 +650,67 @@ ShellRoot {
                                                     } else {
                                                         calendarMenuContainer.displayMonth += 1;
                                                     }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // --- CABECERA DE DÍAS DE LA SEMANA (GridLayout de 7 columnas) ---
+                                    GridLayout {
+                                        Layout.fillWidth: true
+                                        columns: 7
+                                        rowSpacing: 0
+                                        columnSpacing: 0
+
+                                        Repeater {
+                                            model: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+                                            Item {
+                                                required property var modelData
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 24
+                                                Layout.preferredWidth: (parent.width / 7)
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData 
+                                                    color: Theme.subtext
+                                                    font.pixelSize: 12
+                                                    font.bold: true
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // --- GRILLA DE DÍAS ---
+                                    GridView {
+                                        id: calendarGrid
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        model: calendarMenuContainer.getCalendarDays(calendarMenuContainer.displayYear, calendarMenuContainer.displayMonth)
+                                        cellWidth: width / 7
+                                        cellHeight: height / 6
+                                        interactive: false
+
+                                        delegate: Item {
+                                            required property var modelData
+                                            width: GridView.view.cellWidth
+                                            height: GridView.view.cellHeight
+
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: 36
+                                                height: 36
+                                                radius: 8
+                                                color: calendarMenuContainer.isToday(modelData.day) ? Theme.primary : "transparent"
+                                                border.width: modelData.day !== "" ? 1 : 0
+                                                border.color: calendarMenuContainer.isToday(modelData.day) ? Theme.primary : Theme.border
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData.day
+                                                    color: calendarMenuContainer.isToday(modelData.day) ? Theme.bg : Theme.text
+                                                    font.pixelSize: 13
+                                                    font.bold: calendarMenuContainer.isToday(modelData.day) || modelData.day !== ""
                                                 }
                                             }
                                         }
@@ -720,6 +795,9 @@ ShellRoot {
                                             anchors.margins: 2
                                             source: "file://" + modelData
                                             fillMode: Image.PreserveAspectCrop
+                                            asynchronous: true
+                                            sourceSize.width: 180
+                                            sourceSize.height: 100
                                         }
 
                                         MouseArea {
@@ -727,17 +805,14 @@ ShellRoot {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                // 1. Cambiar wallpaper con swaybg
                                                 wallpaperExec.targetPath = modelData;
                                                 wallpaperExec.running = false;
                                                 wallpaperExec.running = true;
 
-                                                // 2. Guardar preferencia
                                                 saveWallpaperConfigExec.targetPath = modelData;
                                                 saveWallpaperConfigExec.running = false;
                                                 saveWallpaperConfigExec.running = true;
 
-                                                // 3. Ejecutar script Python para actualizar colores al instante
                                                 extractorExec.targetPath = modelData;
                                                 extractorExec.running = false;
                                                 extractorExec.running = true;
